@@ -1,7 +1,10 @@
+#include "arena.h"
 #include "math3d.h"
 #include <glad/glad.h>
+#include <stdio.h>
+#include <string.h>
 
-#define MAX_VOXELS 625
+#define MAX_VOXELS 4096
 
 const static unsigned VERTEX_POSITION_LOCATION = 0;
 const static unsigned TEX_COORD_LOCATION = 1;
@@ -10,11 +13,11 @@ const static unsigned INSTANCE_COLOR_LOCATION = 6;
 const static unsigned VERTEX_COUNT = 36;
 
 typedef struct {
-  unsigned long long id;
-} Voxel;
-
-typedef struct {
-  v3 positions;
+  unsigned vao;
+  unsigned vbo;
+  unsigned transformsVbo;
+  unsigned count;
+  m44 *transforms;
 } Voxels;
 
 /*
@@ -132,7 +135,13 @@ static v2 texCoords[VERTEX_COUNT] = {
 
 };
 
-void sfInitVoxelBuffers(unsigned *vao, unsigned *vbo, unsigned *instanceCount);
-void _initInstanceData(m44 *transforms, v4 *colors, int numInstances);
+void __bufferInstanceData(Voxels *voxels);
+void __initBuffers(Voxels *voxels);
 
-void sfRenderVoxels(const unsigned vao, const unsigned instanceCount);
+Voxels sfCreateVoxels(unsigned count);
+void sfDestroyVoxels(Voxels *voxels);
+void sfVoxelInitFloorInstances(const Voxels *voxels);
+void sfRenderVoxels(const Voxels *voxels);
+void sfUpdateVoxelTransforms(Voxels *voxels, const v3 *positions);
+
+Voxels *sfVoxelsArenaAlloc(Arena *arena, unsigned count);

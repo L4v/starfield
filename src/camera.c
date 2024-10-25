@@ -13,6 +13,14 @@ void sfInitCamera(Camera *camera) {
   camera->pitch = 0.0f;
 }
 
+void sfCameraRotatePitch(Camera *camera, float pitch, float dt) {
+  camera->pitch += pitch * dt;
+}
+
+void sfCameraRotateYaw(Camera *camera, float yaw, float dt) {
+  camera->yaw += yaw * dt;
+}
+
 void sfUpdateCameraVectors(Camera *camera) {
   float yaw = camera->yaw * RAD;
   float pitch = camera->pitch * RAD;

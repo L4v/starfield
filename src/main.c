@@ -10,6 +10,11 @@
 #include <stdlib.h>
 #define STB_IMAGE_IMPLEMENTATION
 #include "stb_image.h"
+#define NK_IMPLEMENTATION
+#include "arena.h"
+#include "cubes.h"
+#include "nuklear.h"
+#define G 9.81
 
 float randf() { return (float)rand() / RAND_MAX; }
 
@@ -17,7 +22,23 @@ void glfwErrorCallback(int error, const char *description) {
   fprintf(stderr, "GLFW Error: %s\n", description);
 }
 
-void processKey(unsigned char *key, unsigned char isDown) { *key = isDown; }
+void processKeyEvent(Key *key, unsigned char isDown) {
+  float doubleTapCooldown = 1.0f;
+  unsigned char isDoubleTap = 0;
+  key->isDown = isDown;
+  if (key->isDown) {
+    double currentTime = glfwGetTime();
+
+    if (currentTime - key->lastPressTime < 0.5f && !key->isDoubleTap &&
+        currentTime - key->lastDoubleTapTime > doubleTapCooldown) {
+      isDoubleTap = 1;
+      key->lastDoubleTapTime = currentTime;
+    }
+
+    key->lastPressTime = currentTime;
+  }
+  key->isDoubleTap = isDoubleTap;
+}
 
 void glfwKeyCallback(GLFWwindow *window, int key, int scancode, int action,
                      int mods) {
@@ -33,34 +54,35 @@ void glfwKeyCallback(GLFWwindow *window, int key, int scancode, int action,
       }
       break;
     case GLFW_KEY_UP:
-      processKey(&input->lookUp, isDown);
+      processKeyEvent(&input->lookUp, isDown);
       break;
     case GLFW_KEY_DOWN:
-      processKey(&input->lookDown, isDown);
+      processKeyEvent(&input->lookDown, isDown);
       break;
     case GLFW_KEY_LEFT:
-      processKey(&input->lookLeft, isDown);
+      processKeyEvent(&input->lookLeft, isDown);
       break;
     case GLFW_KEY_RIGHT:
-      processKey(&input->lookRight, isDown);
+      processKeyEvent(&input->lookRight, isDown);
       break;
     case GLFW_KEY_W:
-      processKey(&input->moveForward, isDown);
+      processKeyEvent(&input->moveForward, isDown);
       break;
     case GLFW_KEY_S:
-      processKey(&input->moveBackward, isDown);
+      processKeyEvent(&input->moveBackward, isDown);
       break;
     case GLFW_KEY_A:
-      processKey(&input->moveLeft, isDown);
+      processKeyEvent(&input->moveLeft, isDown);
       break;
     case GLFW_KEY_D:
-      processKey(&input->moveRight, isDown);
+      processKeyEvent(&input->moveRight, isDown);
       break;
     case GLFW_KEY_SPACE:
-      processKey(&input->moveUp, isDown);
+      processKeyEvent(&input->moveUp, isDown);
+      processKeyEvent(&input->toggleFly, isDown);
       break;
     case GLFW_KEY_LEFT_SHIFT:
-      processKey(&input->moveDown, isDown);
+      processKeyEvent(&input->moveDown, isDown);
       break;
     }
   }
@@ -105,11 +127,27 @@ unsigned loadImageAsTexture(const char *filename) {
   return texture;
 }
 
+void sfVoxelsFromCubes(Voxels *voxels, const Cubes *cubes) {
+  for (int i = 0; i < cubes->count; ++i) {
+    const v3 *position = &cubes->positions[i];
+    voxels->transforms[i] = m44_identity(1.0f);
+
+    voxels->transforms[i] = translate(&voxels->transforms[i], position->x,
+                                      position->y, position->z);
+  }
+}
+
 int main() {
+  Arena cubesArena = sfArenaCreate(MEGABYTE, 100);
+  Arena voxelsArena = sfArenaCreate(MEGABYTE, 100);
+
   if (!glfwInit()) {
     fprintf(stderr, "Failed to init glfw\n");
     return -1;
   }
+
+  Voxels *voxels[MAX_VOXELS];
+  unsigned voxelsCount = 0;
 
   int windowWidth = 1680;
   int windowHeight = 1050;
@@ -123,8 +161,25 @@ int main() {
   unsigned starVao, starVbo, starVertexCount, starInstanceCount;
   sfInitStarBuffers(&starVao, &starVbo, &starVertexCount, &starInstanceCount);
 
-  unsigned voxelVao, voxelVbo, voxelInstanceCount;
-  sfInitVoxelBuffers(&voxelVao, &voxelVbo, &voxelInstanceCount);
+  unsigned floorInstanceCount = 4096;
+
+  Voxels *floors = sfVoxelsArenaAlloc(&voxelsArena, floorInstanceCount);
+  sfVoxelInitFloorInstances(floors);
+  voxels[voxelsCount++] = floors;
+
+  unsigned physCubeCount = 10;
+  Cubes *physCubes = sfCubesArenaAlloc(&cubesArena, physCubeCount);
+
+  float cubeAccelerationMag = 16.0f;
+  float cubeSpeed = 10.0f;
+
+  for (int i = 0; i < physCubes->count; ++i) {
+    physCubes->positions[i] = (v3){2.0f * i, 20.0f, 0.0f};
+    physCubes->speeds[i] = i + 1.0f;
+  }
+
+  Voxels *cubeVoxels = sfVoxelsArenaAlloc(&voxelsArena, physCubes->count);
+  voxels[voxelsCount++] = cubeVoxels;
 
   v3 eye = {0.0f, 0.0f, 4.0f};
   v3 center = {0.0f, 0.0f, 0.0f};
@@ -137,8 +192,8 @@ int main() {
   Input input = {0};
   Camera camera = {0};
   sfInitCamera(&camera);
-  Player player = {0};
-  player.movementSpeed = 10.0f;
+  Player player;
+  sfInitPlayer(&player);
 
   glfwSetWindowUserPointer(window, &input);
 
@@ -149,12 +204,71 @@ int main() {
   double time = 0.0f;
 
   unsigned containerTexture = loadImageAsTexture("res/container.jpg");
+  char windowTitle[128];
+
+  float walkingFov = 45.0f;
+  float flyingFov = 60.0f;
+  float fov = walkingFov;
+  float fovAnimDuration = 0.2f;
+  char fovAnimDirection = 0;
+  char fovAnimTimeStart = time;
+  float fovAnimTime = 0;
 
   while (!glfwWindowShouldClose(window)) {
     float startTime = glfwGetTime();
+    for (int i = 0; i < 11; ++i) {
+      input.keys[i].isDoubleTap = 0;
+    }
     glfwPollEvents();
 
     sfUpdate(&input, &camera, &player, dt);
+
+    for (int i = 0; i < physCubes->count; ++i) {
+      // v3 *acceleration = &cubes.accelerations[i];
+      // v3_zero(acceleration);
+      // acceleration->y += -G * dt;
+
+      // v3 *velocity = &cubes.velocities[i];
+      // *velocity =
+      //     v3_add(*velocity, v3_scale(*acceleration, cubeAccelerationMag *
+      //     dt));
+
+      // v3 *position = &cubes.positions[i];
+      // *position = v3_add(*position, v3_scale(*velocity, cubes.speeds[i] *
+      // dt));
+
+      // if (position->y < 1.5f) {
+      //   position->y = 1.5f;
+      //   v3_zero(velocity);
+      //   v3_zero(acceleration);
+      // }
+      float angle = fmod(time * (i + 1.0f), 2 * PI);
+
+      physCubes->positions[i].y = SIN(angle) * 5.0f;
+    }
+
+    if (input.toggleFly.isDoubleTap) {
+      printf("flying: %d\n", (int)player.isFlying);
+      fovAnimDirection = player.isFlying ? 1 : -1;
+      fovAnimTimeStart = time;
+    }
+
+    if (fovAnimDirection) {
+      fovAnimTime += dt;
+      if (fovAnimTime >= fovAnimDuration) {
+        fovAnimDirection = 0;
+        fovAnimTime = 0;
+      }
+
+      float t = fovAnimTime / fovAnimDuration;
+      if (fovAnimDirection > 0) {
+        fov = lerp(walkingFov, flyingFov, t);
+      } else if (fovAnimDirection < 0) {
+        fov = lerp(flyingFov, walkingFov, t);
+      }
+    }
+    printf("anim direction: %d, animtime: %lf, fov: %lf\n", fovAnimDirection,
+           fovAnimTime, fov);
 
     glfwGetFramebufferSize(window, &windowWidth, &windowHeight);
     glViewport(0, 0, windowWidth, windowHeight);
@@ -166,7 +280,7 @@ int main() {
     v3 center = v3_add(camera.position, camera.forward);
     m44 view = lookAt(camera.position, center, camera.up);
     m44 projection =
-        perspective(45.0f, windowWidth / (float)windowHeight, 0.1f, 1000.0f);
+        perspective(fov, windowWidth / (float)windowHeight, 0.1f, 1000.0f);
 
     setUniformM44(starProgram, "projection", &projection);
     setUniformM44(starProgram, "view", &view);
@@ -178,7 +292,11 @@ int main() {
     setUniformM44(voxelProgram, "projection", &projection);
     setUniformM44(voxelProgram, "view", &view);
     glBindTexture(GL_TEXTURE_2D, containerTexture);
-    sfRenderVoxels(voxelVao, voxelInstanceCount);
+
+    sfVoxelsFromCubes(cubeVoxels, physCubes);
+    for (int i = 0; i < voxelsCount; ++i) {
+      sfRenderVoxels(voxels[i]);
+    }
 
     glUseProgram(0);
     glBindVertexArray(0);
@@ -188,7 +306,18 @@ int main() {
 
     dt = glfwGetTime() - startTime;
     time += dt;
+
+    float fps = 1.0f;
+    if (dt > 0) {
+      fps = 1.0f / dt;
+    }
+    snprintf(windowTitle, 128, "FPS: %0.1f", fps);
+
+    glfwSetWindowTitle(window, windowTitle);
   }
+
+  sfArenaFree(&voxelsArena);
+  sfArenaFree(&cubesArena);
 
   glfwDestroyWindow(window);
   glfwTerminate();

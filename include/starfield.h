@@ -1,24 +1,41 @@
 #include "camera.h"
 
 typedef struct {
-  unsigned char moveLeft;
-  unsigned char moveRight;
-  unsigned char moveForward;
-  unsigned char moveBackward;
-  unsigned char moveUp;
-  unsigned char moveDown;
+  unsigned char isDown;
+  unsigned char isDoubleTap;
+  double lastPressTime;
+  double lastDoubleTapTime;
+} Key;
 
-  unsigned char lookLeft;
-  unsigned char lookRight;
-  unsigned char lookUp;
-  unsigned char lookDown;
+typedef struct {
+  union {
+    Key keys[11];
+    struct {
+      Key moveLeft;
+      Key moveRight;
+      Key moveForward;
+      Key moveBackward;
+      Key moveUp;
+      Key moveDown;
+
+      Key lookLeft;
+      Key lookRight;
+      Key lookUp;
+      Key lookDown;
+
+      Key toggleFly;
+    };
+  };
 } Input;
 
 typedef struct {
   v3 position;
   float movementSpeed;
   v3 velocity;
+  unsigned char isFlying;
 } Player;
+
+void sfInitPlayer(Player *player);
 
 void sfMovePlayer(Player *player, const v3 *direction);
 void sfUpdatePlayer(Player *player, float dt);
