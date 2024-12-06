@@ -15,6 +15,8 @@
 #include "cubes.h"
 #include "nuklear.h"
 #define G 9.81
+#define CIMGUI_DEFINE_ENUMS_AND_STRUCTS
+#include <cimgui.h>
 
 float randf() { return (float)rand() / RAND_MAX; }
 
@@ -313,7 +315,15 @@ int main() {
     }
     snprintf(windowTitle, 128, "FPS: %0.1f", fps);
 
-    glfwSetWindowTitle(window, windowTitle);
+    igNewFrame();
+    igBegin("FPS Display", NULL, 0);
+    char buffer[50];
+    snprintf(buffer, sizeof(buffer), "FPS: %.2f", fps);
+    igText(buffer);
+    igEnd();
+    igEndFrame()
+
+        glfwSetWindowTitle(window, windowTitle);
   }
 
   sfArenaFree(&voxelsArena);
