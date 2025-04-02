@@ -46,6 +46,7 @@ void glfwKeyCallback(GLFWwindow *window, int key, int scancode, int action,
                      int mods) {
 
   Input *input = (Input *)glfwGetWindowUserPointer(window);
+  Keyboard *keyboard = input->keyboard;
   unsigned char isDown = action == GLFW_PRESS;
 
   if (action != GLFW_REPEAT) {
@@ -56,41 +57,52 @@ void glfwKeyCallback(GLFWwindow *window, int key, int scancode, int action,
       }
       break;
     case GLFW_KEY_UP:
-      processKeyEvent(&input->lookUp, isDown);
+      processKeyEvent(&keyboard->lookUp, isDown);
       break;
     case GLFW_KEY_DOWN:
-      processKeyEvent(&input->lookDown, isDown);
+      processKeyEvent(&keyboard->lookDown, isDown);
       break;
     case GLFW_KEY_LEFT:
-      processKeyEvent(&input->lookLeft, isDown);
+      processKeyEvent(&keyboard->lookLeft, isDown);
       break;
     case GLFW_KEY_RIGHT:
-      processKeyEvent(&input->lookRight, isDown);
+      processKeyEvent(&keyboard->lookRight, isDown);
       break;
     case GLFW_KEY_W:
-      processKeyEvent(&input->moveForward, isDown);
+      processKeyEvent(&keyboard->moveForward, isDown);
       break;
     case GLFW_KEY_S:
-      processKeyEvent(&input->moveBackward, isDown);
+      processKeyEvent(&keyboard->moveBackward, isDown);
       break;
     case GLFW_KEY_A:
-      processKeyEvent(&input->moveLeft, isDown);
+      processKeyEvent(&keyboard->moveLeft, isDown);
       break;
     case GLFW_KEY_D:
-      processKeyEvent(&input->moveRight, isDown);
+      processKeyEvent(&keyboard->moveRight, isDown);
       break;
     case GLFW_KEY_SPACE:
-      processKeyEvent(&input->moveUp, isDown);
-      processKeyEvent(&input->toggleFly, isDown);
+      processKeyEvent(&keyboard->moveUp, isDown);
+      processKeyEvent(&keyboard->toggleFly, isDown);
       break;
     case GLFW_KEY_LEFT_SHIFT:
-      processKeyEvent(&input->moveDown, isDown);
+      processKeyEvent(&keyboard->moveDown, isDown);
       break;
     }
   }
 }
 
+void glfwCursorPosCallback(GLFWwindow *window, double xpos, double ypos) {
+  Input *input = (Input *)glfwGetWindowUserPointer(window);
+  Mouse *mouse = input->mouse;
+  mouse->dx = mouse->x - xpos;
+  mouse->x = xpos;
+
+  mouse->dy = mouse->y - ypos;
+  mouse->y = ypos;
+}
+
 GLFWwindow *initGlfwWindow(int width, int height) {
+  glfwSetErrorCallback(glfwErrorCallback);
   glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
   glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
   glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
@@ -101,6 +113,10 @@ GLFWwindow *initGlfwWindow(int width, int height) {
   }
   glfwMakeContextCurrent(window);
   glfwSetKeyCallback(window, glfwKeyCallback);
+  glfwSetCursorPosCallback(window, glfwCursorPosCallback);
+  glfwSwapInterval(1);
+  glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+  glfwSetCursorPos(window, 0, 0);
   return window;
 }
 
@@ -139,35 +155,61 @@ void sfVoxelsFromCubes(Voxels *voxels, const Cubes *cubes) {
   }
 }
 
+// TODO(Jovan): Use arena
+GLuint generateColorTexture(int width, int height, int r, int g, int b) {
+    GLuint texture;
+    GLubyte *data = (GLubyte *)malloc(width * height * 3);
+
+    for (int i = 0; i < width * height * 3; i += 3) {
+        data[i] = r;
+        data[i + 1] = g;
+        data[i + 2] = b;
+    }
+
+    glGenTextures(1, &texture);
+    glBindTexture(GL_TEXTURE_2D, texture);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, width, height, 0, GL_RGB, GL_UNSIGNED_BYTE, data);
+
+    free(data);
+    return texture;
+}
+
 int main() {
-  Arena cubesArena = sfArenaCreate(MEGABYTE, 100);
-  Arena voxelsArena = sfArenaCreate(MEGABYTE, 100);
+  Arena inputArena = sfArenaCreate(MEGABYTE, 1);
 
   if (!glfwInit()) {
     fprintf(stderr, "Failed to init glfw\n");
     return -1;
   }
 
-  Voxels *voxels[MAX_VOXELS];
-  unsigned voxelsCount = 0;
-
   int windowWidth = 1680;
   int windowHeight = 1050;
-  glfwSetErrorCallback(glfwErrorCallback);
   GLFWwindow *window = initGlfwWindow(windowWidth, windowHeight);
-  glfwSwapInterval(1);
 
   gladLoadGLLoader((GLADloadproc)glfwGetProcAddress);
   glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
+
+  Input *input = sfInputInit(&inputArena);
+  glfwSetWindowUserPointer(window, input);
+  glEnable(GL_DEPTH_TEST);
+  glEnable(GL_CULL_FACE);
+
+  Arena cubesArena = sfArenaCreate(MEGABYTE, 100);
+  Arena voxelsArena = sfArenaCreate(MEGABYTE, 100);
+
+  Voxels *voxels[MAX_VOXELS];
+  unsigned voxelsCount = 0;
 
   unsigned starVao, starVbo, starVertexCount, starInstanceCount;
   sfInitStarBuffers(&starVao, &starVbo, &starVertexCount, &starInstanceCount);
 
   unsigned floorInstanceCount = 4096;
 
-  Voxels *floors = sfVoxelsArenaAlloc(&voxelsArena, floorInstanceCount);
-  sfVoxelInitFloorInstances(floors);
-  voxels[voxelsCount++] = floors;
+  /* Voxels *floors = sfVoxelsArenaAlloc(&voxelsArena, floorInstanceCount); */
+  /* sfVoxelInitFloorInstances(floors); */
+  /* voxels[voxelsCount++] = floors; */
 
   unsigned physCubeCount = 10;
   Cubes *physCubes = sfCubesArenaAlloc(&cubesArena, physCubeCount);
@@ -189,23 +231,21 @@ int main() {
 
   int starProgram = createShaderProgram("shaders/basic.vs", "shaders/basic.fs");
   int voxelProgram =
-      createShaderProgram("shaders/voxels.vs", "shaders/voxel.fs");
+      createShaderProgram("shaders/voxels.vs", "shaders/voxels.fs");
+  int debugProgram = createShaderProgram("shaders/voxels.vs", "shaders/debug.fs");
 
-  Input input = {0};
   Camera camera = {0};
   sfInitCamera(&camera);
   Player player;
-  sfInitPlayer(&player);
-
-  glfwSetWindowUserPointer(window, &input);
-
-  glEnable(GL_DEPTH_TEST);
-  glEnable(GL_CULL_FACE);
+  sfPlayerInit(&player);
 
   float dt = 0.0f;
   double time = 0.0f;
 
   unsigned containerTexture = loadImageAsTexture("res/container.jpg");
+  unsigned redDebugTexture = generateColorTexture(64, 64, 255, 0, 0);
+  unsigned greenDebugTexture = generateColorTexture(64, 64, 0, 255, 0);
+  unsigned blueDebugTexture = generateColorTexture(64, 64, 0, 0, 255);
   char windowTitle[128];
 
   float walkingFov = 45.0f;
@@ -216,14 +256,43 @@ int main() {
   char fovAnimTimeStart = time;
   float fovAnimTime = 0;
 
+  v3 X[4] = {
+    {1.0f, 2.0f, 5.0f}, {5.0f, 2.0f, 5.0f}, {5.0f, 5.0f, 5.0f}, {1.0f, 5.0f, 5.0f}
+  };
+
+  v3 Y[4] = {
+    {2.0f, 3.0f, 5.0f}, {7.0f, 3.0f, 5.0f}, {7.0f, 8.0f, 5.0f}, {2.0f, 8.0f, 5.0f}
+  };
+
+  v3 minkowskiDiff[16] = {0};
+  unsigned minkowskiIdx = 0;
+  for (int i = 0; i < 4; ++i) {
+    for (int j = 0; j < 4; ++j) {
+      minkowskiDiff[minkowskiIdx++]= v3_sub(X[i], Y[j]);
+      /* printf("____\n"); */
+      /* printf("v[%d]\n\t  (%lf, %lf, %lf)\n\t- (%lf, %lf, %lf)", minkowskiIdx, X[i].x, X[i].y, X[i].z, Y[j].x, Y[j].y, Y[j].z); */
+      /* printf("\n\t= (%lf, %lf, %lf) | diff\n", diff.x, diff.y, diff.z); */
+      /* printf("\n\t= (%lf, %lf, %lf) | minkowskiDiff\n", minkowskiDiff[minkowskiIdx].x, minkowskiDiff[minkowskiIdx].y, minkowskiDiff[minkowskiIdx].z); */
+    }
+  }
+
+  Voxels* minkowskiVoxels = sfVoxelsArenaAlloc(&voxelsArena, 16);
+  for(int i = 0; i < 16; ++i) {
+    const v3 *position = &minkowskiDiff[i];
+    m44 transform = m44_identity(1.0f);
+    transform = translate_v3(&transform, position);
+    transform = scale(&transform, 0.2, 0.2, 0.2);
+    minkowskiVoxels->transforms[i] = transform;
+    minkowskiVoxels->textures[i] = redDebugTexture;
+
+  }
+
+  Keyboard *keyboard = input->keyboard;
   while (!glfwWindowShouldClose(window)) {
     float startTime = glfwGetTime();
-    for (int i = 0; i < 11; ++i) {
-      input.keys[i].isDoubleTap = 0;
-    }
+    sfInputClearControllers(input);
     glfwPollEvents();
-
-    sfUpdate(&input, &camera, &player, dt);
+    sfUpdate(input, &camera, &player, dt);
 
     for (int i = 0; i < physCubes->count; ++i) {
       // v3 *acceleration = &cubes.accelerations[i];
@@ -249,7 +318,7 @@ int main() {
       physCubes->positions[i].y = SIN(angle) * 5.0f;
     }
 
-    if (input.toggleFly.isDoubleTap) {
+    if (keyboard->toggleFly.isDoubleTap) {
       printf("flying: %d\n", (int)player.isFlying);
       fovAnimDirection = player.isFlying ? 1 : -1;
       fovAnimTimeStart = time;
@@ -269,8 +338,8 @@ int main() {
         fov = lerp(flyingFov, walkingFov, t);
       }
     }
-    printf("anim direction: %d, animtime: %lf, fov: %lf\n", fovAnimDirection,
-           fovAnimTime, fov);
+    // printf("anim direction: %d, animtime: %lf, fov: %lf\n", fovAnimDirection,
+    //        fovAnimTime, fov);
 
     glfwGetFramebufferSize(window, &windowWidth, &windowHeight);
     glViewport(0, 0, windowWidth, windowHeight);
@@ -295,7 +364,11 @@ int main() {
     setUniformM44(voxelProgram, "view", &view);
     glBindTexture(GL_TEXTURE_2D, containerTexture);
 
-    sfVoxelsFromCubes(cubeVoxels, physCubes);
+    /* sfVoxelsFromCubes(cubeVoxels, physCubes); */
+
+    // Render voxel arena
+    glBindTexture(GL_TEXTURE_2D, blueDebugTexture);
+    sfRenderVoxels(minkowskiVoxels);
     for (int i = 0; i < voxelsCount; ++i) {
       sfRenderVoxels(voxels[i]);
     }
@@ -315,15 +388,16 @@ int main() {
     }
     snprintf(windowTitle, 128, "FPS: %0.1f", fps);
 
-    igNewFrame();
-    igBegin("FPS Display", NULL, 0);
-    char buffer[50];
-    snprintf(buffer, sizeof(buffer), "FPS: %.2f", fps);
-    igText(buffer);
-    igEnd();
-    igEndFrame()
+    // igNewFrame();
+    // igBegin("FPS Display", NULL, 0);
+    // char buffer[50];
+    // snprintf(buffer, sizeof(buffer), "FPS: %.2f", fps);
+    // igText(buffer);
+    // igEnd();
+    // igEndFrame();
+    //
 
-        glfwSetWindowTitle(window, windowTitle);
+    glfwSetWindowTitle(window, windowTitle);
   }
 
   sfArenaFree(&voxelsArena);

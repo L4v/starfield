@@ -13,5 +13,5 @@ typedef struct {
 
 void sfInitCamera(Camera *camera);
 void sfUpdateCameraVectors(Camera *camera);
-void sfCameraRotatePitch(Camera *camera, float pitch, float dt);
-void sfCameraRotateYaw(Camera *camera, float yaw, float dt);
+void sfCameraRotatePitch(Camera *camera, float pitchSpeed, float dt);
+void sfCameraRotateYaw(Camera *camera, float yawSpeed, float dt);

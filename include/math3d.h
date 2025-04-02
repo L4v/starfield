@@ -349,7 +349,7 @@ quat quat_slerp(const quat &q1, const quat &q2, float t) {
 
 /* NOTE(Jovan):
  * Each row is a separate vector. `x`, `y`, `z` and `w` are vector
- * components and the numbers indicate vector indices.
+ * components.
  * Example: `ax`, `ay`, `az`, `aw` are components of vector `a`
  */
 // TODO(Jovan) : FIX rows->vectors rename, recheck everything;
@@ -524,6 +524,10 @@ L4VDEF m44 translate(const m44 *m, float x, float y, float z) {
   return result;
 }
 
+L4VDEF m44 translate_v3(const m44 *m, const v3 *v) {
+  return translate(m, v->x, v->y, v->z);
+}
+
 L4VDEF m44 scale(const m44 *m, float x, float y, float z) {
   m44 result = *m;
   result.ax *= x;
@@ -538,6 +542,10 @@ L4VDEF m44 scale(const m44 *m, float x, float y, float z) {
   result.cy *= z;
   result.cz *= z;
   return result;
+}
+
+L4VDEF m44 scale_v3(const m44 *m, const v3 *v) {
+  return scale(m, v->x, v->y, v->z);
 }
 
 L4VDEF m44 rotate(const m44 *m, float angle, float ax, float ay, float az) {

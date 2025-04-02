@@ -5,18 +5,19 @@
 #include <string.h>
 
 #define MAX_VOXELS 4096
+#define VERTEX_COUNT 36
 
 const static unsigned VERTEX_POSITION_LOCATION = 0;
 const static unsigned TEX_COORD_LOCATION = 1;
 const static unsigned INSTANCE_TRANSFORM_LOCATION = 2;
 const static unsigned INSTANCE_COLOR_LOCATION = 6;
-const static unsigned VERTEX_COUNT = 36;
 
 typedef struct {
   unsigned vao;
   unsigned vbo;
   unsigned transformsVbo;
   unsigned count;
+  unsigned *textures;
   m44 *transforms;
 } Voxels;
 

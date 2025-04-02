@@ -1,4 +1,7 @@
+#include "arena.h"
 #include "camera.h"
+
+#define sfInit(type, arena) ((type *)sfArenaAlloc((arena), sizeof(type)))
 
 typedef struct {
   unsigned char isDown;
@@ -26,6 +29,19 @@ typedef struct {
       Key toggleFly;
     };
   };
+} Keyboard;
+
+typedef struct {
+  double x;
+  double dx;
+
+  double y;
+  double dy;
+} Mouse;
+
+typedef struct {
+  Keyboard *keyboard;
+  Mouse *mouse;
 } Input;
 
 typedef struct {
@@ -35,9 +51,15 @@ typedef struct {
   unsigned char isFlying;
 } Player;
 
-void sfInitPlayer(Player *player);
-
 void sfMovePlayer(Player *player, const v3 *direction);
 void sfUpdatePlayer(Player *player, float dt);
 
 void sfUpdate(Input *input, Camera *camera, Player *player, float dt);
+// TODO(Jovan): Make macro abstraction of simple inits
+void sfPlayerInit(Player *player);
+Input *sfInputInit(Arena *arena);
+void sfInputClearControllers(Input *input);
+Keyboard *sfKeyboardInit(Arena *arena);
+void sfKeyboardClearIsDown(Keyboard *keyboard);
+Mouse *sfMouseInit(Arena *arena);
+void sfMouseClearDeltas(Mouse *mouse);

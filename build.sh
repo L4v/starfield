@@ -2,7 +2,8 @@
 #
 
 PROJECT_ROOT=$(pwd)
-PATH_TO_CIMGUI_SHARED_LIB="${PROJECT_ROOT}/lib/cimgui.dylib" # .dll on Windows
+# PATH_TO_CIMGUI_SHARED_LIB="${PROJECT_ROOT}/lib/cimgui.dylib" # .dll on Windows
+PATH_TO_CIMGUI_SHARED_LIB="${PROJECT_ROOT}/lib/cimgui.so" # .so on Linux
 PATH_TO_CIMGUI_HEADERS="${PROJECT_ROOT}/lib/cimgui/"
 echo PATH $PATH_TO_CIMGUI_SHARED_LIB 
 echo PATH $PATH_TO_CIMGUI_HEADERS

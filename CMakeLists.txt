@@ -9,15 +9,15 @@ message(STATUS "CImgui header location: ${PATH_TO_CIMGUI_HEADERS}")
 find_package(OpenGL REQUIRED)
 find_package(glfw3 REQUIRED)
 
-file(GLOB_RECURSE SOURCES 
+file(GLOB_RECURSE SOURCES
    "src/*.c"
 )
 
 # Add glad
-add_library(glad STATIC 
+add_library(glad STATIC
    glad/src/glad.c
 )
-target_include_directories(glad PRIVATE 
+target_include_directories(glad PRIVATE
    glad/include
 )
 
@@ -39,7 +39,7 @@ target_include_directories(starfield PRIVATE
 )
 
 # Link libraries
-target_link_libraries(starfield PRIVATE 
+target_link_libraries(starfield PRIVATE
    OpenGL::GL
    glfw
    glad
