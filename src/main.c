@@ -15,8 +15,8 @@
 #include "cubes.h"
 #include "nuklear.h"
 #define G 9.81
-#define CIMGUI_DEFINE_ENUMS_AND_STRUCTS
-#include <cimgui.h>
+// #define CIMGUI_DEFINE_ENUMS_AND_STRUCTS
+// #include <cimgui.h>
 
 float randf() { return (float)rand() / RAND_MAX; }
 
@@ -157,23 +157,24 @@ void sfVoxelsFromCubes(Voxels *voxels, const Cubes *cubes) {
 
 // TODO(Jovan): Use arena
 GLuint generateColorTexture(int width, int height, int r, int g, int b) {
-    GLuint texture;
-    GLubyte *data = (GLubyte *)malloc(width * height * 3);
+  GLuint texture;
+  GLubyte *data = (GLubyte *)malloc(width * height * 3);
 
-    for (int i = 0; i < width * height * 3; i += 3) {
-        data[i] = r;
-        data[i + 1] = g;
-        data[i + 2] = b;
-    }
+  for (int i = 0; i < width * height * 3; i += 3) {
+    data[i] = r;
+    data[i + 1] = g;
+    data[i + 2] = b;
+  }
 
-    glGenTextures(1, &texture);
-    glBindTexture(GL_TEXTURE_2D, texture);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, width, height, 0, GL_RGB, GL_UNSIGNED_BYTE, data);
+  glGenTextures(1, &texture);
+  glBindTexture(GL_TEXTURE_2D, texture);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+  glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, width, height, 0, GL_RGB,
+               GL_UNSIGNED_BYTE, data);
 
-    free(data);
-    return texture;
+  free(data);
+  return texture;
 }
 
 int main() {
@@ -222,7 +223,13 @@ int main() {
     physCubes->speeds[i] = i + 1.0f;
   }
 
+  unsigned containerTexture = loadImageAsTexture("res/container.jpg");
+  unsigned redDebugTexture = generateColorTexture(64, 64, 255, 0, 0);
+  unsigned greenDebugTexture = generateColorTexture(64, 64, 0, 255, 0);
+  unsigned blueDebugTexture = generateColorTexture(64, 64, 0, 0, 255);
+
   Voxels *cubeVoxels = sfVoxelsArenaAlloc(&voxelsArena, physCubes->count);
+  cubeVoxels->texture = containerTexture;
   voxels[voxelsCount++] = cubeVoxels;
 
   v3 eye = {0.0f, 0.0f, 4.0f};
@@ -232,7 +239,8 @@ int main() {
   int starProgram = createShaderProgram("shaders/basic.vs", "shaders/basic.fs");
   int voxelProgram =
       createShaderProgram("shaders/voxels.vs", "shaders/voxels.fs");
-  int debugProgram = createShaderProgram("shaders/voxels.vs", "shaders/debug.fs");
+  int debugProgram =
+      createShaderProgram("shaders/voxels.vs", "shaders/debug.fs");
 
   Camera camera = {0};
   sfInitCamera(&camera);
@@ -241,11 +249,6 @@ int main() {
 
   float dt = 0.0f;
   double time = 0.0f;
-
-  unsigned containerTexture = loadImageAsTexture("res/container.jpg");
-  unsigned redDebugTexture = generateColorTexture(64, 64, 255, 0, 0);
-  unsigned greenDebugTexture = generateColorTexture(64, 64, 0, 255, 0);
-  unsigned blueDebugTexture = generateColorTexture(64, 64, 0, 0, 255);
   char windowTitle[128];
 
   float walkingFov = 45.0f;
@@ -256,36 +259,54 @@ int main() {
   char fovAnimTimeStart = time;
   float fovAnimTime = 0;
 
-  v3 X[4] = {
-    {1.0f, 2.0f, 5.0f}, {5.0f, 2.0f, 5.0f}, {5.0f, 5.0f, 5.0f}, {1.0f, 5.0f, 5.0f}
-  };
+  v3 X[4] = {{1.0f, 2.0f, 5.0f},
+             {5.0f, 2.0f, 5.0f},
+             {5.0f, 5.0f, 5.0f},
+             {1.0f, 5.0f, 5.0f}};
 
-  v3 Y[4] = {
-    {2.0f, 3.0f, 5.0f}, {7.0f, 3.0f, 5.0f}, {7.0f, 8.0f, 5.0f}, {2.0f, 8.0f, 5.0f}
-  };
+  v3 Y[4] = {{2.0f, 3.0f, 5.0f},
+             {7.0f, 3.0f, 5.0f},
+             {7.0f, 8.0f, 5.0f},
+             {2.0f, 8.0f, 5.0f}};
 
   v3 minkowskiDiff[16] = {0};
   unsigned minkowskiIdx = 0;
   for (int i = 0; i < 4; ++i) {
     for (int j = 0; j < 4; ++j) {
-      minkowskiDiff[minkowskiIdx++]= v3_sub(X[i], Y[j]);
-      /* printf("____\n"); */
-      /* printf("v[%d]\n\t  (%lf, %lf, %lf)\n\t- (%lf, %lf, %lf)", minkowskiIdx, X[i].x, X[i].y, X[i].z, Y[j].x, Y[j].y, Y[j].z); */
-      /* printf("\n\t= (%lf, %lf, %lf) | diff\n", diff.x, diff.y, diff.z); */
-      /* printf("\n\t= (%lf, %lf, %lf) | minkowskiDiff\n", minkowskiDiff[minkowskiIdx].x, minkowskiDiff[minkowskiIdx].y, minkowskiDiff[minkowskiIdx].z); */
+      minkowskiDiff[minkowskiIdx++] = v3_sub(X[i], Y[j]);
     }
   }
 
-  Voxels* minkowskiVoxels = sfVoxelsArenaAlloc(&voxelsArena, 16);
-  for(int i = 0; i < 16; ++i) {
+  Voxels *minkowskiXVoxels = sfVoxelsArenaAlloc(&voxelsArena, 4);
+  minkowskiXVoxels->texture = greenDebugTexture;
+  voxels[voxelsCount++] = minkowskiXVoxels;
+  Voxels *minkowskiYVoxels = sfVoxelsArenaAlloc(&voxelsArena, 4);
+  minkowskiYVoxels->texture = blueDebugTexture;
+  voxels[voxelsCount++] = minkowskiYVoxels;
+  for (int i = 0; i < 4; ++i) {
+    m44 transform = m44_identity(1.0f);
+    v3 *position = &X[i];
+    transform = translate_v3(&transform, position);
+    transform = scale(&transform, 0.2, 0.2, 0.2);
+    minkowskiXVoxels->transforms[i] = transform;
+
+    transform = m44_identity(1.0f);
+    position = &Y[i];
+    transform = translate_v3(&transform, position);
+    transform = scale(&transform, 0.2, 0.2, 0.2);
+    minkowskiYVoxels->transforms[i] = transform;
+  }
+
+  Voxels *minkowskiVoxels = sfVoxelsArenaAlloc(&voxelsArena, 16);
+  for (int i = 0; i < 16; ++i) {
     const v3 *position = &minkowskiDiff[i];
     m44 transform = m44_identity(1.0f);
     transform = translate_v3(&transform, position);
     transform = scale(&transform, 0.2, 0.2, 0.2);
     minkowskiVoxels->transforms[i] = transform;
-    minkowskiVoxels->textures[i] = redDebugTexture;
-
   }
+  minkowskiVoxels->texture = redDebugTexture;
+  voxels[voxelsCount++] = minkowskiVoxels;
 
   Keyboard *keyboard = input->keyboard;
   while (!glfwWindowShouldClose(window)) {
@@ -356,19 +377,17 @@ int main() {
     setUniformM44(starProgram, "projection", &projection);
     setUniformM44(starProgram, "view", &view);
 
-    glBindVertexArray(starVao);
-    glDrawArraysInstanced(GL_TRIANGLES, 0, starVertexCount, starInstanceCount);
+    // glBindVertexArray(starVao);
+    // glDrawArraysInstanced(GL_TRIANGLES, 0, starVertexCount,
+    // starInstanceCount);
 
     glUseProgram(voxelProgram);
     setUniformM44(voxelProgram, "projection", &projection);
     setUniformM44(voxelProgram, "view", &view);
-    glBindTexture(GL_TEXTURE_2D, containerTexture);
 
     /* sfVoxelsFromCubes(cubeVoxels, physCubes); */
 
     // Render voxel arena
-    glBindTexture(GL_TEXTURE_2D, blueDebugTexture);
-    sfRenderVoxels(minkowskiVoxels);
     for (int i = 0; i < voxelsCount; ++i) {
       sfRenderVoxels(voxels[i]);
     }
@@ -387,15 +406,6 @@ int main() {
       fps = 1.0f / dt;
     }
     snprintf(windowTitle, 128, "FPS: %0.1f", fps);
-
-    // igNewFrame();
-    // igBegin("FPS Display", NULL, 0);
-    // char buffer[50];
-    // snprintf(buffer, sizeof(buffer), "FPS: %.2f", fps);
-    // igText(buffer);
-    // igEnd();
-    // igEndFrame();
-    //
 
     glfwSetWindowTitle(window, windowTitle);
   }

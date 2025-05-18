@@ -17,7 +17,7 @@ typedef struct {
   unsigned vbo;
   unsigned transformsVbo;
   unsigned count;
-  unsigned *textures;
+  unsigned texture;
   m44 *transforms;
 } Voxels;
 

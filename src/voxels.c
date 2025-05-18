@@ -90,20 +90,18 @@ Voxels sfCreateVoxels(unsigned count) {
   return voxels;
 }
 
-void sfDestroyVoxels(Voxels *voxels) { 
-  free(voxels->transforms);
-  free(voxels->textures);
-}
+void sfDestroyVoxels(Voxels *voxels) { free(voxels->transforms); }
 
 void sfRenderVoxels(const Voxels *voxels) {
+  if (voxels->texture) {
+    glBindTexture(GL_TEXTURE_2D, voxels->texture);
+  }
+
   glBindVertexArray(voxels->vao);
 
   glBindBuffer(GL_ARRAY_BUFFER, voxels->transformsVbo);
-  glBindTexture(GL_TEXTURE_2D, containerTexture);
   glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(m44) * voxels->count,
                   voxels->transforms);
-
-  glBindBuffer(GL_ARRAY_BUFFER, 0);
 
   glDrawArraysInstanced(GL_TRIANGLES, 0, VERTEX_COUNT, voxels->count);
 }
@@ -121,7 +119,6 @@ Voxels *sfVoxelsArenaAlloc(Arena *arena, unsigned count) {
   Voxels *voxels = (Voxels *)sfArenaAlloc(arena, sizeof(Voxels));
   voxels->count = count;
   voxels->transforms = (m44 *)sfArenaAlloc(arena, sizeof(m44) * count);
-  voxels->textures = (unsigned *)sfArenaAlloc(arena, sizeof(unsigned) * count);
   __initBuffers(voxels);
   return voxels;
 }

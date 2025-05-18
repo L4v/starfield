@@ -3,8 +3,8 @@ project(starfield C)
 
 set(CMAKE_C_STANDARD 11)
 
-message(STATUS "CImgui lib location: ${PATH_TO_CIMGUI_SHARED_LIB}")
-message(STATUS "CImgui header location: ${PATH_TO_CIMGUI_HEADERS}")
+# message(STATUS "CImgui lib location: ${PATH_TO_CIMGUI_SHARED_LIB}")
+# message(STATUS "CImgui header location: ${PATH_TO_CIMGUI_HEADERS}")
 # Find required packages
 find_package(OpenGL REQUIRED)
 find_package(glfw3 REQUIRED)
@@ -22,17 +22,17 @@ target_include_directories(glad PRIVATE
 )
 
 # Add cimgui
-add_library(cimgui SHARED IMPORTED)
-set_target_properties(cimgui PROPERTIES
-   IMPORTED_LOCATION "${PATH_TO_CIMGUI_SHARED_LIB}"
-   INTERFACE_INCLUDE_DIRECTORIES "${PATH_TO_CIMGUI_HEADERS}"
-)
+# add_library(cimgui SHARED IMPORTED)
+# set_target_properties(cimgui PROPERTIES
+#    IMPORTED_LOCATION "${PATH_TO_CIMGUI_SHARED_LIB}"
+#    INTERFACE_INCLUDE_DIRECTORIES "${PATH_TO_CIMGUI_HEADERS}"
+# )
 
 # Add main executable
 add_executable(starfield ${SOURCES})
 target_compile_features(starfield PRIVATE c_std_11)
 target_include_directories(starfield PRIVATE
-   ${PATH_TO_CIMGUI_HEADERS}
+   # ${PATH_TO_CIMGUI_HEADERS}
    glad/include
    include
    src
@@ -43,12 +43,12 @@ target_link_libraries(starfield PRIVATE
    OpenGL::GL
    glfw
    glad
-   cimgui
+   # cimgui
 )
 
 # Copy cimgui shared library to output directory
-add_custom_command(TARGET starfield POST_BUILD
-   COMMAND ${CMAKE_COMMAND} -E copy_if_different
-   "${PATH_TO_CIMGUI_SHARED_LIB}"
-   $<TARGET_FILE_DIR:starfield>
-)
+# add_custom_command(TARGET starfield POST_BUILD
+#    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+#    "${PATH_TO_CIMGUI_SHARED_LIB}"
+#    $<TARGET_FILE_DIR:starfield>
+# )

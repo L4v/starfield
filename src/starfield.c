@@ -2,7 +2,7 @@
 
 void sfPlayerInit(Player *player) {
   player->movementSpeed = 6.0f;
-  player->position = (v3){0.0f, 1.0f, 10.0f};
+  player->position = (v3){0.0f, -0.5f, 10.0f};
   player->isFlying = 0;
 }
 
@@ -13,9 +13,9 @@ void sfMovePlayer(Player *player, const v3 *direction) {
 
 void sfUpdatePlayer(Player *player, float dt) {
   player->position = v3_add(player->position, v3_scale(player->velocity, dt));
-  if (!player->isFlying && player->position.y < 1.0f) {
-    player->position.y = 1.0f;
-  }
+  // if (!player->isFlying && player->position.y < 1.0f) {
+  //   player->position.y = 1.0f;
+  // }
 }
 
 void sfUpdate(Input *input, Camera *camera, Player *player, float dt) {
@@ -75,7 +75,7 @@ void sfUpdate(Input *input, Camera *camera, Player *player, float dt) {
 
   if (!player->isFlying) {
     v3 direction = v3_neg(&camera->WORLD_UP);
-    sfMovePlayer(player, &direction);
+    // sfMovePlayer(player, &direction);
   }
 
   Mouse *mouse = input->mouse;
