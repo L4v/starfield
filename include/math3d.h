@@ -175,10 +175,23 @@ L4VDEF v3 v3_cross(const v3 a, const v3 b) {
   return result;
 }
 
+// a x (b x c) = (a . c)b - (a . b)c
+L4VDEF v3 v3_tripple_cross(const v3 a, const v3 b, const v3 c) {
+  float acDot = v3_dot(a, c);
+  float abDot = v3_dot(a, b);
+  v3 v0 = v3_scale(b, acDot);
+  v3 v1 = v3_scale(c, abDot);
+  return v3_sub(v0, v1);
+}
+
 L4VDEF v3 v3_lerp(const v3 a, const v3 b, float t) {
   v3 scaled_a = v3_scale(a, 1.0f - t);
   v3 scaled_b = v3_scale(b, t);
   return v3_add(scaled_a, scaled_b);
+}
+
+L4VDEF void v3_print(const v3 *v) {
+  printf("(%lf, %lf, %lf)", v->x, v->y, v->z);
 }
 
 struct v4 {

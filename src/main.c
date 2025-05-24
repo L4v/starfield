@@ -177,8 +177,50 @@ GLuint generateColorTexture(int width, int height, int r, int g, int b) {
   return texture;
 }
 
+int gjk(const Cubes *cubes, unsigned idx1, unsigned idx2) {
+  v3 direction =
+      v3_norm(v3_sub(cubes->positions[idx2], cubes->positions[idx1]));
+  unsigned simplexCount = 1;
+  v3 simplex[4] = {0};
+  simplex[0] = sfCubesSupport(cubes, idx1, idx2, direction);
+  direction = v3_norm(v3_sub(v3_0(), simplex[0]));
+
+  while (1) {
+    v3 A = sfCubesSupport(cubes, idx1, idx2, direction);
+    if (v3_dot(A, direction) < 0) {
+      return 0;
+    }
+    simplex[simplexCount++] = A;
+    v3 AB = v3_sub(simplex[1], simplex[0]);
+    v3 A0 = v3_sub(v3_0(), simplex[0]);
+    if (simplexCount == 2) {
+      // Line Case
+      direction = v3_tripple_cross(AB, A0, AB); // AB perp
+    } else {
+      // Triangle case
+      v3 AC = v3_sub(simplex[2], simplex[0]);
+      v3 ABPerp = v3_tripple_cross(AC, AB, AB);
+      v3 ACPerp = v3_tripple_cross(AB, AC, AC);
+      if (v3_dot(ABPerp, A0) > 0) {
+        // AB region
+        --simplexCount; // Remove C
+        direction = ABPerp;
+      } else if (v3_dot(ACPerp, A0) > 0) {
+        // AC region
+        simplex[1] = simplex[2]; // Remove B
+        --simplexCount;
+        direction = ACPerp;
+      } else {
+        return 1;
+      }
+    }
+  }
+}
+
 int main() {
   Arena inputArena = sfArenaCreate(MEGABYTE, 1);
+  Arena cubesArena = sfArenaCreate(MEGABYTE, 100);
+  Arena voxelsArena = sfArenaCreate(MEGABYTE, 100);
 
   if (!glfwInit()) {
     fprintf(stderr, "Failed to init glfw\n");
@@ -197,8 +239,10 @@ int main() {
   glEnable(GL_DEPTH_TEST);
   glEnable(GL_CULL_FACE);
 
-  Arena cubesArena = sfArenaCreate(MEGABYTE, 100);
-  Arena voxelsArena = sfArenaCreate(MEGABYTE, 100);
+  unsigned containerTexture = loadImageAsTexture("res/container.jpg");
+  unsigned redDebugTexture = generateColorTexture(64, 64, 255, 0, 0);
+  unsigned greenDebugTexture = generateColorTexture(64, 64, 0, 255, 0);
+  unsigned blueDebugTexture = generateColorTexture(64, 64, 0, 0, 255);
 
   Voxels *voxels[MAX_VOXELS];
   unsigned voxelsCount = 0;
@@ -206,35 +250,13 @@ int main() {
   unsigned starVao, starVbo, starVertexCount, starInstanceCount;
   sfInitStarBuffers(&starVao, &starVbo, &starVertexCount, &starInstanceCount);
 
-  unsigned floorInstanceCount = 4096;
+  Cubes *minkowskiCubes = sfCubesArenaAlloc(&cubesArena, 2);
+  minkowskiCubes->positions[0] = v3_make(0.0f, 0.0f, 0.0f);
+  minkowskiCubes->positions[1] = v3_make(1.0f, 1.0f, 1.0f);
 
-  /* Voxels *floors = sfVoxelsArenaAlloc(&voxelsArena, floorInstanceCount); */
-  /* sfVoxelInitFloorInstances(floors); */
-  /* voxels[voxelsCount++] = floors; */
-
-  unsigned physCubeCount = 10;
-  Cubes *physCubes = sfCubesArenaAlloc(&cubesArena, physCubeCount);
-
-  float cubeAccelerationMag = 16.0f;
-  float cubeSpeed = 10.0f;
-
-  for (int i = 0; i < physCubes->count; ++i) {
-    physCubes->positions[i] = (v3){2.0f * i, 20.0f, 0.0f};
-    physCubes->speeds[i] = i + 1.0f;
-  }
-
-  unsigned containerTexture = loadImageAsTexture("res/container.jpg");
-  unsigned redDebugTexture = generateColorTexture(64, 64, 255, 0, 0);
-  unsigned greenDebugTexture = generateColorTexture(64, 64, 0, 255, 0);
-  unsigned blueDebugTexture = generateColorTexture(64, 64, 0, 0, 255);
-
-  Voxels *cubeVoxels = sfVoxelsArenaAlloc(&voxelsArena, physCubes->count);
+  Voxels *cubeVoxels = sfVoxelsArenaAlloc(&voxelsArena, minkowskiCubes->count);
   cubeVoxels->texture = containerTexture;
   voxels[voxelsCount++] = cubeVoxels;
-
-  v3 eye = {0.0f, 0.0f, 4.0f};
-  v3 center = {0.0f, 0.0f, 0.0f};
-  v3 up = {0.0f, 1.0f, 0.0f};
 
   int starProgram = createShaderProgram("shaders/basic.vs", "shaders/basic.fs");
   int voxelProgram =
@@ -259,54 +281,22 @@ int main() {
   char fovAnimTimeStart = time;
   float fovAnimTime = 0;
 
-  v3 X[4] = {{1.0f, 2.0f, 5.0f},
-             {5.0f, 2.0f, 5.0f},
-             {5.0f, 5.0f, 5.0f},
-             {1.0f, 5.0f, 5.0f}};
+  v3 minkowskiDiff[64] = {0};
 
-  v3 Y[4] = {{2.0f, 3.0f, 5.0f},
-             {7.0f, 3.0f, 5.0f},
-             {7.0f, 8.0f, 5.0f},
-             {2.0f, 8.0f, 5.0f}};
+  Voxels *minkowski0Voxels = sfVoxelsArenaAlloc(&voxelsArena, 8);
+  minkowski0Voxels->texture = greenDebugTexture;
+  /* voxels[voxelsCount++] = minkowski0Voxels; */
+  Voxels *minkowski1Voxels = sfVoxelsArenaAlloc(&voxelsArena, 8);
+  minkowski1Voxels->texture = blueDebugTexture;
+  /* voxels[voxelsCount++] = minkowski1Voxels; */
 
-  v3 minkowskiDiff[16] = {0};
-  unsigned minkowskiIdx = 0;
-  for (int i = 0; i < 4; ++i) {
-    for (int j = 0; j < 4; ++j) {
-      minkowskiDiff[minkowskiIdx++] = v3_sub(X[i], Y[j]);
-    }
-  }
-
-  Voxels *minkowskiXVoxels = sfVoxelsArenaAlloc(&voxelsArena, 4);
-  minkowskiXVoxels->texture = greenDebugTexture;
-  voxels[voxelsCount++] = minkowskiXVoxels;
-  Voxels *minkowskiYVoxels = sfVoxelsArenaAlloc(&voxelsArena, 4);
-  minkowskiYVoxels->texture = blueDebugTexture;
-  voxels[voxelsCount++] = minkowskiYVoxels;
-  for (int i = 0; i < 4; ++i) {
-    m44 transform = m44_identity(1.0f);
-    v3 *position = &X[i];
-    transform = translate_v3(&transform, position);
-    transform = scale(&transform, 0.2, 0.2, 0.2);
-    minkowskiXVoxels->transforms[i] = transform;
-
-    transform = m44_identity(1.0f);
-    position = &Y[i];
-    transform = translate_v3(&transform, position);
-    transform = scale(&transform, 0.2, 0.2, 0.2);
-    minkowskiYVoxels->transforms[i] = transform;
-  }
-
-  Voxels *minkowskiVoxels = sfVoxelsArenaAlloc(&voxelsArena, 16);
-  for (int i = 0; i < 16; ++i) {
-    const v3 *position = &minkowskiDiff[i];
-    m44 transform = m44_identity(1.0f);
-    transform = translate_v3(&transform, position);
-    transform = scale(&transform, 0.2, 0.2, 0.2);
-    minkowskiVoxels->transforms[i] = transform;
-  }
+  Voxels *minkowskiVoxels = sfVoxelsArenaAlloc(&voxelsArena, 64);
   minkowskiVoxels->texture = redDebugTexture;
-  voxels[voxelsCount++] = minkowskiVoxels;
+  /* voxels[voxelsCount++] = minkowskiVoxels; */
+
+  Voxels *supportVoxels = sfVoxelsArenaAlloc(&voxelsArena, 1);
+  supportVoxels->texture = redDebugTexture;
+  voxels[voxelsCount++] = supportVoxels;
 
   Keyboard *keyboard = input->keyboard;
   while (!glfwWindowShouldClose(window)) {
@@ -315,34 +305,68 @@ int main() {
     glfwPollEvents();
     sfUpdate(input, &camera, &player, dt);
 
-    for (int i = 0; i < physCubes->count; ++i) {
-      // v3 *acceleration = &cubes.accelerations[i];
-      // v3_zero(acceleration);
-      // acceleration->y += -G * dt;
+    sfCubesUpdateVertices(minkowskiCubes);
 
-      // v3 *velocity = &cubes.velocities[i];
-      // *velocity =
-      //     v3_add(*velocity, v3_scale(*acceleration, cubeAccelerationMag *
-      //     dt));
-
-      // v3 *position = &cubes.positions[i];
-      // *position = v3_add(*position, v3_scale(*velocity, cubes.speeds[i] *
-      // dt));
-
-      // if (position->y < 1.5f) {
-      //   position->y = 1.5f;
-      //   v3_zero(velocity);
-      //   v3_zero(acceleration);
-      // }
-      float angle = fmod(time * (i + 1.0f), 2 * PI);
-
-      physCubes->positions[i].y = SIN(angle) * 5.0f;
+    unsigned colliding = gjk(minkowskiCubes, 0, 1);
+    if (colliding) {
+      printf("Colliding\n");
+    } else {
+      printf("Not colliding\n");
     }
+
+    unsigned minkowskiIdx = 0;
+    for (int i = 0; i < 8; ++i) {
+      for (int j = 0; j < 8; ++j) {
+        v3 v0 = minkowskiCubes->vertices[i];
+        v3 v1 = minkowskiCubes->vertices[8 + j];
+        minkowskiDiff[minkowskiIdx++] = v3_sub(v0, v1);
+      }
+    }
+
+    for (int i = 0; i < 8; ++i) {
+      m44 transform = m44_identity(1.0f);
+      transform = translate_v3(&transform, &minkowskiCubes->vertices[i]);
+      transform = scale(&transform, 0.2, 0.2, 0.2);
+      minkowski0Voxels->transforms[i] = transform;
+
+      transform = m44_identity(1.0f);
+      transform = translate_v3(&transform, &minkowskiCubes->vertices[8 + i]);
+      transform = scale(&transform, 0.2, 0.2, 0.2);
+      minkowski1Voxels->transforms[i] = transform;
+    }
+    for (int i = 0; i < 64; ++i) {
+      m44 transform = m44_identity(1.0f);
+      transform = translate_v3(&transform, &minkowskiDiff[i]);
+      transform = scale(&transform, 0.2, 0.2, 0.2);
+      minkowskiVoxels->transforms[i] = transform;
+    }
+
+    v3 supportA = sfCubeSupport(minkowskiCubes, 0, v3_make(0.0, 1.0, -1.0));
+    m44 supportTransform = m44_identity(1.0f);
+    supportTransform = translate_v3(&supportTransform, &supportA);
+    supportTransform = scale(&supportTransform, 0.2, 0.2, 0.2);
+    supportVoxels->transforms[0] = supportTransform;
 
     if (keyboard->toggleFly.isDoubleTap) {
       printf("flying: %d\n", (int)player.isFlying);
       fovAnimDirection = player.isFlying ? 1 : -1;
       fovAnimTimeStart = time;
+    }
+
+    if (keyboard->lookLeft.isDown) {
+      minkowskiCubes->positions[0].x += -1.0 * dt;
+    }
+
+    if (keyboard->lookRight.isDown) {
+      minkowskiCubes->positions[0].x += 1.0 * dt;
+    }
+
+    if (keyboard->lookDown.isDown) {
+      minkowskiCubes->positions[1].x += -1.0 * dt;
+    }
+
+    if (keyboard->lookUp.isDown) {
+      minkowskiCubes->positions[1].x += 1.0 * dt;
     }
 
     if (fovAnimDirection) {
@@ -385,7 +409,7 @@ int main() {
     setUniformM44(voxelProgram, "projection", &projection);
     setUniformM44(voxelProgram, "view", &view);
 
-    /* sfVoxelsFromCubes(cubeVoxels, physCubes); */
+    sfVoxelsFromCubes(cubeVoxels, minkowskiCubes);
 
     // Render voxel arena
     for (int i = 0; i < voxelsCount; ++i) {
@@ -412,6 +436,7 @@ int main() {
 
   sfArenaFree(&voxelsArena);
   sfArenaFree(&cubesArena);
+  sfArenaFree(&inputArena);
 
   glfwDestroyWindow(window);
   glfwTerminate();

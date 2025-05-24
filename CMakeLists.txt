@@ -43,6 +43,7 @@ target_link_libraries(starfield PRIVATE
    OpenGL::GL
    glfw
    glad
+   m
    # cimgui
 )
 

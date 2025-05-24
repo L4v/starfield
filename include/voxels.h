@@ -1,8 +1,6 @@
 #include "arena.h"
 #include "math3d.h"
 #include <glad/glad.h>
-#include <stdio.h>
-#include <string.h>
 
 #define MAX_VOXELS 4096
 #define VERTEX_COUNT 36
