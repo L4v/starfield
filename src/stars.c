@@ -18,7 +18,7 @@ void _initStarInstanceData(m44 *data, int numInstances) {
   }
 }
 
-void sfInitStarBuffers(unsigned *vao, unsigned *vbo, unsigned *vertexCount,
+void sfStarInitBuffers(unsigned *vao, unsigned *vbo, unsigned *vertexCount,
                        unsigned *instanceCount) {
   v3 tri00 = {-0.866f, -0.5f, 0.0f};
   v3 tri01 = {0.866f, -0.5f, 0.0f};

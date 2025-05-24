@@ -1,24 +1,22 @@
 #include "starfield.h"
 
-void sfPlayerInit(Player *player) {
-  player->movementSpeed = 6.0f;
-  player->position = (v3){0.0f, -0.5f, 10.0f};
-  player->isFlying = 0;
-}
-
 void sfMovePlayer(Player *player, const v3 *direction) {
   player->velocity =
       v3_add(player->velocity, v3_scale(*direction, player->movementSpeed));
 }
 
-void sfUpdatePlayer(Player *player, float dt) {
+void sfPlayerUpdate(Player *player, float dt) {
   player->position = v3_add(player->position, v3_scale(player->velocity, dt));
   // if (!player->isFlying && player->position.y < 1.0f) {
   //   player->position.y = 1.0f;
   // }
 }
 
-void sfUpdate(Input *input, Camera *camera, Player *player, float dt) {
+void sfUpdate(State *state) {
+  Player *player = state->player;
+  Input *input = state->input;
+  Camera *camera = state->camera;
+  float dt = state->dt;
 
   // TODO(Jovan): Test out just in case. Due to `glfwPollEvents` order
   Keyboard *keyboard = input->keyboard;
@@ -88,7 +86,35 @@ void sfUpdate(Input *input, Camera *camera, Player *player, float dt) {
     sfCameraRotatePitch(camera, mouse->dy * 10.0, dt);
   }
 
-  sfUpdatePlayer(player, dt);
+  sfPlayerUpdate(player, dt);
+
+  float walkingFov = 45.0f;
+  float flyingFov = 60.0f;
+  float fovAnimDuration = 0.2f;
+  char fovAnimDirection = 0;
+  char fovAnimTimeStart = state->time;
+  float fovAnimTime = 0;
+
+  if (keyboard->toggleFly.isDoubleTap) {
+    fovAnimDirection = player->isFlying ? 1 : -1;
+    fovAnimTimeStart = state->time;
+  }
+
+  if (fovAnimDirection) {
+    fovAnimTime += dt;
+    if (fovAnimTime >= fovAnimDuration) {
+      fovAnimDirection = 0;
+      fovAnimTime = 0;
+    }
+
+    float t = fovAnimTime / fovAnimDuration;
+    if (fovAnimDirection > 0) {
+      camera->fov = lerp(walkingFov, flyingFov, t);
+    } else if (fovAnimDirection < 0) {
+      camera->fov = lerp(flyingFov, walkingFov, t);
+    }
+  }
+
   camera->position = player->position;
   sfUpdateCameraVectors(camera);
 }
@@ -125,4 +151,22 @@ Input *sfInputInit(Arena *arena) {
 void sfInputClearControllers(Input *input) {
   sfKeyboardClearIsDown(input->keyboard);
   sfMouseClearDeltas(input->mouse);
+}
+
+Player *sfPlayerInit(Arena *arena) {
+  Player *player = (Player *)sfArenaAlloc(arena, sizeof(Player));
+  player->movementSpeed = 6.0f;
+  player->position = (v3){0.0f, -0.5f, 10.0f};
+  player->isFlying = 0;
+  return player;
+}
+
+State *sfStateInit(Arena *arena) {
+  State *state = (State *)sfArenaAlloc(arena, sizeof(State));
+  state->input = sfInputInit(arena);
+  state->player = sfPlayerInit(arena);
+  state->camera = sfCameraInit(arena);
+  state->dt = 0.0f;
+  state->time = 0.0;
+  return state;
 }

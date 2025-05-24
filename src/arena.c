@@ -20,9 +20,11 @@ void *sfArenaAlloc(Arena *arena, size_t size) {
     return NULL;
   }
 
-  arena->allocPosition += newArenaSize;
+  /* arena->allocPosition += newArenaSize; */
+  void *currentPosition = arena->allocPosition;
+  arena->allocPosition = (char *)arena->allocPosition + size;
   arena->size = arena->allocPosition - arena->baseMemory;
-  return arena->allocPosition;
+  return currentPosition;
 }
 
 void sfArenaFree(Arena *arena) { free(arena->baseMemory); }

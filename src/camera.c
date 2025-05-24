@@ -1,6 +1,7 @@
 #include "camera.h"
 
-void sfInitCamera(Camera *camera) {
+Camera *sfCameraInit(Arena *arena) {
+  Camera *camera = (Camera *)sfArenaAlloc(arena, sizeof(Camera));
   camera->position = (v3){0.0f, 0.0f, 4.0f};
   camera->up = (v3){0.0f, 1.0f, 0.0f};
 
@@ -11,6 +12,8 @@ void sfInitCamera(Camera *camera) {
   camera->right = v3_norm(v3_cross(camera->forward, camera->up));
   camera->WORLD_UP = (v3){0.0f, 1.0f, 0.0f};
   camera->pitch = 0.0f;
+  camera->fov = 45.0f;
+  return camera;
 }
 
 void sfCameraRotatePitch(Camera *camera, float pitchSpeed, float dt) {

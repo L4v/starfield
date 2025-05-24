@@ -45,7 +45,8 @@ void processKeyEvent(Key *key, unsigned char isDown) {
 void glfwKeyCallback(GLFWwindow *window, int key, int scancode, int action,
                      int mods) {
 
-  Input *input = (Input *)glfwGetWindowUserPointer(window);
+  State *state = (State *)glfwGetWindowUserPointer(window);
+  Input *input = state->input;
   Keyboard *keyboard = input->keyboard;
   unsigned char isDown = action == GLFW_PRESS;
 
@@ -92,7 +93,8 @@ void glfwKeyCallback(GLFWwindow *window, int key, int scancode, int action,
 }
 
 void glfwCursorPosCallback(GLFWwindow *window, double xpos, double ypos) {
-  Input *input = (Input *)glfwGetWindowUserPointer(window);
+  State *state = (State *)glfwGetWindowUserPointer(window);
+  Input *input = state->input;
   Mouse *mouse = input->mouse;
   mouse->dx = mouse->x - xpos;
   mouse->x = xpos;
@@ -177,48 +179,9 @@ GLuint generateColorTexture(int width, int height, int r, int g, int b) {
   return texture;
 }
 
-int gjk(const Cubes *cubes, unsigned idx1, unsigned idx2) {
-  v3 direction =
-      v3_norm(v3_sub(cubes->positions[idx2], cubes->positions[idx1]));
-  unsigned simplexCount = 1;
-  v3 simplex[4] = {0};
-  simplex[0] = sfCubesSupport(cubes, idx1, idx2, direction);
-  direction = v3_norm(v3_sub(v3_0(), simplex[0]));
-
-  while (1) {
-    v3 A = sfCubesSupport(cubes, idx1, idx2, direction);
-    if (v3_dot(A, direction) < 0) {
-      return 0;
-    }
-    simplex[simplexCount++] = A;
-    v3 AB = v3_sub(simplex[1], simplex[0]);
-    v3 A0 = v3_sub(v3_0(), simplex[0]);
-    if (simplexCount == 2) {
-      // Line Case
-      direction = v3_tripple_cross(AB, A0, AB); // AB perp
-    } else {
-      // Triangle case
-      v3 AC = v3_sub(simplex[2], simplex[0]);
-      v3 ABPerp = v3_tripple_cross(AC, AB, AB);
-      v3 ACPerp = v3_tripple_cross(AB, AC, AC);
-      if (v3_dot(ABPerp, A0) > 0) {
-        // AB region
-        --simplexCount; // Remove C
-        direction = ABPerp;
-      } else if (v3_dot(ACPerp, A0) > 0) {
-        // AC region
-        simplex[1] = simplex[2]; // Remove B
-        --simplexCount;
-        direction = ACPerp;
-      } else {
-        return 1;
-      }
-    }
-  }
-}
-
 int main() {
-  Arena inputArena = sfArenaCreate(MEGABYTE, 1);
+  // TODO(Jovan): Better management
+  Arena stateArena = sfArenaCreate(MEGABYTE, 1);
   Arena cubesArena = sfArenaCreate(MEGABYTE, 100);
   Arena voxelsArena = sfArenaCreate(MEGABYTE, 100);
 
@@ -230,12 +193,13 @@ int main() {
   int windowWidth = 1680;
   int windowHeight = 1050;
   GLFWwindow *window = initGlfwWindow(windowWidth, windowHeight);
+  State *state = sfStateInit(&stateArena);
+
+  glfwSetWindowUserPointer(window, state);
 
   gladLoadGLLoader((GLADloadproc)glfwGetProcAddress);
-  glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
 
-  Input *input = sfInputInit(&inputArena);
-  glfwSetWindowUserPointer(window, input);
+  glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
   glEnable(GL_DEPTH_TEST);
   glEnable(GL_CULL_FACE);
 
@@ -244,19 +208,18 @@ int main() {
   unsigned greenDebugTexture = generateColorTexture(64, 64, 0, 255, 0);
   unsigned blueDebugTexture = generateColorTexture(64, 64, 0, 0, 255);
 
+  // TODO(Jovan): Arena
   Voxels *voxels[MAX_VOXELS];
   unsigned voxelsCount = 0;
 
+  Voxels *testVoxels = sfVoxelsArenaAlloc(&voxelsArena, 1);
+  voxels[voxelsCount++] = testVoxels;
+
+  testVoxels->texture = containerTexture;
+  testVoxels->transforms[0] = m44_identity(1.0f);
+
   unsigned starVao, starVbo, starVertexCount, starInstanceCount;
-  sfInitStarBuffers(&starVao, &starVbo, &starVertexCount, &starInstanceCount);
-
-  Cubes *minkowskiCubes = sfCubesArenaAlloc(&cubesArena, 2);
-  minkowskiCubes->positions[0] = v3_make(0.0f, 0.0f, 0.0f);
-  minkowskiCubes->positions[1] = v3_make(1.0f, 1.0f, 1.0f);
-
-  Voxels *cubeVoxels = sfVoxelsArenaAlloc(&voxelsArena, minkowskiCubes->count);
-  cubeVoxels->texture = containerTexture;
-  voxels[voxelsCount++] = cubeVoxels;
+  sfStarInitBuffers(&starVao, &starVbo, &starVertexCount, &starInstanceCount);
 
   int starProgram = createShaderProgram("shaders/basic.vs", "shaders/basic.fs");
   int voxelProgram =
@@ -264,127 +227,13 @@ int main() {
   int debugProgram =
       createShaderProgram("shaders/voxels.vs", "shaders/debug.fs");
 
-  Camera camera = {0};
-  sfInitCamera(&camera);
-  Player player;
-  sfPlayerInit(&player);
-
-  float dt = 0.0f;
-  double time = 0.0f;
   char windowTitle[128];
 
-  float walkingFov = 45.0f;
-  float flyingFov = 60.0f;
-  float fov = walkingFov;
-  float fovAnimDuration = 0.2f;
-  char fovAnimDirection = 0;
-  char fovAnimTimeStart = time;
-  float fovAnimTime = 0;
-
-  v3 minkowskiDiff[64] = {0};
-
-  Voxels *minkowski0Voxels = sfVoxelsArenaAlloc(&voxelsArena, 8);
-  minkowski0Voxels->texture = greenDebugTexture;
-  /* voxels[voxelsCount++] = minkowski0Voxels; */
-  Voxels *minkowski1Voxels = sfVoxelsArenaAlloc(&voxelsArena, 8);
-  minkowski1Voxels->texture = blueDebugTexture;
-  /* voxels[voxelsCount++] = minkowski1Voxels; */
-
-  Voxels *minkowskiVoxels = sfVoxelsArenaAlloc(&voxelsArena, 64);
-  minkowskiVoxels->texture = redDebugTexture;
-  /* voxels[voxelsCount++] = minkowskiVoxels; */
-
-  Voxels *supportVoxels = sfVoxelsArenaAlloc(&voxelsArena, 1);
-  supportVoxels->texture = redDebugTexture;
-  voxels[voxelsCount++] = supportVoxels;
-
-  Keyboard *keyboard = input->keyboard;
   while (!glfwWindowShouldClose(window)) {
     float startTime = glfwGetTime();
-    sfInputClearControllers(input);
+    sfInputClearControllers(state->input);
     glfwPollEvents();
-    sfUpdate(input, &camera, &player, dt);
-
-    sfCubesUpdateVertices(minkowskiCubes);
-
-    unsigned colliding = gjk(minkowskiCubes, 0, 1);
-    if (colliding) {
-      printf("Colliding\n");
-    } else {
-      printf("Not colliding\n");
-    }
-
-    unsigned minkowskiIdx = 0;
-    for (int i = 0; i < 8; ++i) {
-      for (int j = 0; j < 8; ++j) {
-        v3 v0 = minkowskiCubes->vertices[i];
-        v3 v1 = minkowskiCubes->vertices[8 + j];
-        minkowskiDiff[minkowskiIdx++] = v3_sub(v0, v1);
-      }
-    }
-
-    for (int i = 0; i < 8; ++i) {
-      m44 transform = m44_identity(1.0f);
-      transform = translate_v3(&transform, &minkowskiCubes->vertices[i]);
-      transform = scale(&transform, 0.2, 0.2, 0.2);
-      minkowski0Voxels->transforms[i] = transform;
-
-      transform = m44_identity(1.0f);
-      transform = translate_v3(&transform, &minkowskiCubes->vertices[8 + i]);
-      transform = scale(&transform, 0.2, 0.2, 0.2);
-      minkowski1Voxels->transforms[i] = transform;
-    }
-    for (int i = 0; i < 64; ++i) {
-      m44 transform = m44_identity(1.0f);
-      transform = translate_v3(&transform, &minkowskiDiff[i]);
-      transform = scale(&transform, 0.2, 0.2, 0.2);
-      minkowskiVoxels->transforms[i] = transform;
-    }
-
-    v3 supportA = sfCubeSupport(minkowskiCubes, 0, v3_make(0.0, 1.0, -1.0));
-    m44 supportTransform = m44_identity(1.0f);
-    supportTransform = translate_v3(&supportTransform, &supportA);
-    supportTransform = scale(&supportTransform, 0.2, 0.2, 0.2);
-    supportVoxels->transforms[0] = supportTransform;
-
-    if (keyboard->toggleFly.isDoubleTap) {
-      printf("flying: %d\n", (int)player.isFlying);
-      fovAnimDirection = player.isFlying ? 1 : -1;
-      fovAnimTimeStart = time;
-    }
-
-    if (keyboard->lookLeft.isDown) {
-      minkowskiCubes->positions[0].x += -1.0 * dt;
-    }
-
-    if (keyboard->lookRight.isDown) {
-      minkowskiCubes->positions[0].x += 1.0 * dt;
-    }
-
-    if (keyboard->lookDown.isDown) {
-      minkowskiCubes->positions[1].x += -1.0 * dt;
-    }
-
-    if (keyboard->lookUp.isDown) {
-      minkowskiCubes->positions[1].x += 1.0 * dt;
-    }
-
-    if (fovAnimDirection) {
-      fovAnimTime += dt;
-      if (fovAnimTime >= fovAnimDuration) {
-        fovAnimDirection = 0;
-        fovAnimTime = 0;
-      }
-
-      float t = fovAnimTime / fovAnimDuration;
-      if (fovAnimDirection > 0) {
-        fov = lerp(walkingFov, flyingFov, t);
-      } else if (fovAnimDirection < 0) {
-        fov = lerp(flyingFov, walkingFov, t);
-      }
-    }
-    // printf("anim direction: %d, animtime: %lf, fov: %lf\n", fovAnimDirection,
-    //        fovAnimTime, fov);
+    sfUpdate(state);
 
     glfwGetFramebufferSize(window, &windowWidth, &windowHeight);
     glViewport(0, 0, windowWidth, windowHeight);
@@ -392,11 +241,12 @@ int main() {
 
     glUseProgram(starProgram);
 
-    setUniformFloat(starProgram, "time", time);
-    v3 center = v3_add(camera.position, camera.forward);
-    m44 view = lookAt(camera.position, center, camera.up);
-    m44 projection =
-        perspective(fov, windowWidth / (float)windowHeight, 0.1f, 1000.0f);
+    setUniformFloat(starProgram, "time", state->time);
+    Camera *camera = state->camera;
+    v3 center = v3_add(camera->position, camera->forward);
+    m44 view = lookAt(camera->position, center, camera->up);
+    m44 projection = perspective(camera->fov, windowWidth / (float)windowHeight,
+                                 0.1f, 1000.0f);
 
     setUniformM44(starProgram, "projection", &projection);
     setUniformM44(starProgram, "view", &view);
@@ -409,8 +259,6 @@ int main() {
     setUniformM44(voxelProgram, "projection", &projection);
     setUniformM44(voxelProgram, "view", &view);
 
-    sfVoxelsFromCubes(cubeVoxels, minkowskiCubes);
-
     // Render voxel arena
     for (int i = 0; i < voxelsCount; ++i) {
       sfRenderVoxels(voxels[i]);
@@ -422,12 +270,12 @@ int main() {
 
     glfwSwapBuffers(window);
 
-    dt = glfwGetTime() - startTime;
-    time += dt;
+    state->dt = glfwGetTime() - startTime;
+    state->time += state->dt;
 
     float fps = 1.0f;
-    if (dt > 0) {
-      fps = 1.0f / dt;
+    if (state->dt > 0) {
+      fps = 1.0f / state->dt;
     }
     snprintf(windowTitle, 128, "FPS: %0.1f", fps);
 
@@ -436,7 +284,7 @@ int main() {
 
   sfArenaFree(&voxelsArena);
   sfArenaFree(&cubesArena);
-  sfArenaFree(&inputArena);
+  sfArenaFree(&stateArena);
 
   glfwDestroyWindow(window);
   glfwTerminate();

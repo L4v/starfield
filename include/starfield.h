@@ -51,15 +51,24 @@ typedef struct {
   unsigned char isFlying;
 } Player;
 
-void sfMovePlayer(Player *player, const v3 *direction);
-void sfUpdatePlayer(Player *player, float dt);
+typedef struct {
+  Input *input;
+  Player *player;
+  Camera *camera;
+  float dt;
+  double time;
+} State;
 
-void sfUpdate(Input *input, Camera *camera, Player *player, float dt);
+void sfMovePlayer(Player *player, const v3 *direction);
+void sfPlayerUpdate(Player *player, float dt);
+
+void sfUpdate(State *state);
 // TODO(Jovan): Make macro abstraction of simple inits
-void sfPlayerInit(Player *player);
+Player *sfPlayerInit(Arena *arena);
 Input *sfInputInit(Arena *arena);
 void sfInputClearControllers(Input *input);
 Keyboard *sfKeyboardInit(Arena *arena);
 void sfKeyboardClearIsDown(Keyboard *keyboard);
 Mouse *sfMouseInit(Arena *arena);
 void sfMouseClearDeltas(Mouse *mouse);
+State *sfStateInit(Arena *arena);
