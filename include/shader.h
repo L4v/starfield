@@ -1,3 +1,5 @@
+#ifndef SHADER_H
+#define SHADER_H
 #include "math3d.h"
 #include <glad/glad.h>
 #include <stdio.h>
@@ -14,3 +16,4 @@ void setUniformM44(int program, const char *uniform, const m44 *m);
 void setUniformFloat(int program, const char *uniform, float f);
 void setUniformF4(int program, const char *uniform, float r, float g, float b,
                   float a);
+#endif

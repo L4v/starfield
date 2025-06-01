@@ -1,3 +1,6 @@
+#ifndef CUBES_H
+#define CUBES_H
+
 #include "arena.h"
 #include "common.h"
 #include "math3d.h"
@@ -31,3 +34,4 @@ v3 sfCubeSupport(const Cubes *cubes, unsigned index, v3 direction);
 v3 sfCubesSupport(const Cubes *cubes, unsigned idx1, unsigned idx2,
                   v3 direction);
 void sfCubesUpdateVertices(Cubes *cubes);
+#endif

@@ -12,11 +12,10 @@
 #include "stb_image.h"
 #define NK_IMPLEMENTATION
 #include "arena.h"
+#include "boids.h"
 #include "cubes.h"
 #include "nuklear.h"
 #define G 9.81
-// #define CIMGUI_DEFINE_ENUMS_AND_STRUCTS
-// #include <cimgui.h>
 
 float randf() { return (float)rand() / RAND_MAX; }
 
@@ -181,9 +180,8 @@ GLuint generateColorTexture(int width, int height, int r, int g, int b) {
 
 int main() {
   // TODO(Jovan): Better management
-  Arena stateArena = sfArenaCreate(MEGABYTE, 1);
-  Arena cubesArena = sfArenaCreate(MEGABYTE, 100);
-  Arena voxelsArena = sfArenaCreate(MEGABYTE, 100);
+  Arena stateArena = sfArenaInit(MEGABYTE, 1);
+  Arena voxelsArena = sfArenaInit(MEGABYTE, 100);
 
   if (!glfwInit()) {
     fprintf(stderr, "Failed to init glfw\n");
@@ -211,12 +209,6 @@ int main() {
   // TODO(Jovan): Arena
   Voxels *voxels[MAX_VOXELS];
   unsigned voxelsCount = 0;
-
-  Voxels *testVoxels = sfVoxelsArenaAlloc(&voxelsArena, 1);
-  voxels[voxelsCount++] = testVoxels;
-
-  testVoxels->texture = containerTexture;
-  testVoxels->transforms[0] = m44_identity(1.0f);
 
   unsigned starVao, starVbo, starVertexCount, starInstanceCount;
   sfStarInitBuffers(&starVao, &starVbo, &starVertexCount, &starInstanceCount);
@@ -280,10 +272,10 @@ int main() {
     snprintf(windowTitle, 128, "FPS: %0.1f", fps);
 
     glfwSetWindowTitle(window, windowTitle);
+    printf("%0.1f\n", fps);
   }
 
   sfArenaFree(&voxelsArena);
-  sfArenaFree(&cubesArena);
   sfArenaFree(&stateArena);
 
   glfwDestroyWindow(window);

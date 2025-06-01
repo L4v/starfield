@@ -1,3 +1,5 @@
+#ifndef VOXELS_H
+#define VOXELS_H
 #include "arena.h"
 #include "math3d.h"
 #include <glad/glad.h>
@@ -144,3 +146,4 @@ void sfRenderVoxels(const Voxels *voxels);
 void sfUpdateVoxelTransforms(Voxels *voxels, const v3 *positions);
 
 Voxels *sfVoxelsArenaAlloc(Arena *arena, unsigned count);
+#endif

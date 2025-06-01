@@ -1,3 +1,6 @@
+#ifndef STARFIELD_H
+#define STARFIELD_H
+
 #include "arena.h"
 #include "camera.h"
 
@@ -72,3 +75,4 @@ void sfKeyboardClearIsDown(Keyboard *keyboard);
 Mouse *sfMouseInit(Arena *arena);
 void sfMouseClearDeltas(Mouse *mouse);
 State *sfStateInit(Arena *arena);
+#endif

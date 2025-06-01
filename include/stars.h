@@ -1,3 +1,5 @@
+#ifndef STARS_H
+#define STARS_H
 #define MAX_STARS 10000
 #include "math3d.h"
 #include <glad/glad.h>
@@ -6,3 +8,4 @@ void sfStarInitBuffers(unsigned *vao, unsigned *vbo, unsigned *vertexCount,
                        unsigned *instanceCount);
 
 void _initStarInstanceData(m44 *data, int numInstances);
+#endif

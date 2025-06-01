@@ -194,6 +194,22 @@ L4VDEF void v3_print(const v3 *v) {
   printf("(%lf, %lf, %lf)", v->x, v->y, v->z);
 }
 
+L4VDEF v3 v3_randf_clamped(float min, float max) {
+  v3 v;
+  v.x = randf_clamped(min, max);
+  v.y = randf_clamped(min, max);
+  v.z = randf_clamped(min, max);
+  return v;
+}
+
+L4VDEF v3 v3_clampf(v3 v, float min, float max) {
+  v3 clamped = v;
+  clamped.x = clampf(v.x, min, max);
+  clamped.y = clampf(v.y, min, max);
+  clamped.z = clampf(v.z, min, max);
+  return clamped;
+}
+
 struct v4 {
   union {
     float v[4];

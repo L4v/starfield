@@ -13,7 +13,7 @@ typedef struct {
   size_t capacity;
 } Arena;
 
-Arena sfArenaCreate(size_t blockSize, unsigned blockCount);
+Arena sfArenaInit(size_t blockSize, unsigned blockCount);
 void *sfArenaAlloc(Arena *arena, size_t size);
 void sfArenaFree(Arena *arena);
 

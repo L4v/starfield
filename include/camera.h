@@ -1,3 +1,6 @@
+#ifndef CAMERA_H
+#define CAMERA_H
+
 #include "arena.h"
 #include "math3d.h"
 
@@ -17,3 +20,4 @@ Camera *sfCameraInit(Arena *arena);
 void sfUpdateCameraVectors(Camera *camera);
 void sfCameraRotatePitch(Camera *camera, float pitchSpeed, float dt);
 void sfCameraRotateYaw(Camera *camera, float yawSpeed, float dt);
+#endif

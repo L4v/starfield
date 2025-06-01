@@ -1,7 +1,7 @@
 
 #include "arena.h"
 
-Arena sfArenaCreate(size_t blockSize, unsigned blockCount) {
+Arena sfArenaInit(size_t blockSize, unsigned blockCount) {
   Arena arena = {0};
   arena.capacity = blockSize * blockCount;
   arena.baseMemory = calloc(blockSize, blockCount);
