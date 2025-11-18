@@ -1,22 +1,11 @@
 #include "cubes.h"
 
-Cubes sfCreateCubes(unsigned count) {
-  Cubes cubes = {0};
-
-  cubes.count = count;
-  cubes.positions = calloc(count, sizeof(v3));
-  cubes.velocities = calloc(count, sizeof(v3));
-  cubes.accelerations = calloc(count, sizeof(v3));
-  cubes.speeds = calloc(count, sizeof(float));
-
-  return cubes;
-}
-
 void sfDestroyCubes(Cubes *cubes) {
   free(cubes->positions);
   free(cubes->velocities);
   free(cubes->accelerations);
-  free(cubes->speeds);
+  free(cubes->masses);
+  free(cubes->sizes);
 }
 
 Cubes *sfCubesArenaAlloc(Arena *arena, unsigned count) {
@@ -24,10 +13,15 @@ Cubes *sfCubesArenaAlloc(Arena *arena, unsigned count) {
 
   cubes->count = count;
 
-  cubes->speeds = (float *)sfArenaAlloc(arena, sizeof(float) * cubes->count);
+  cubes->masses = (float *)sfArenaAlloc(arena, sizeof(float) * cubes->count);
   cubes->positions = sfV3ArenaAlloc(arena, cubes->count);
   cubes->velocities = sfV3ArenaAlloc(arena, cubes->count);
   cubes->accelerations = sfV3ArenaAlloc(arena, cubes->count);
+  cubes->sizes = (float *)sfArenaAlloc(arena, sizeof(float) * cubes->count);
+
+  for (int i = 0; i < cubes->count; ++i) {
+    cubes->sizes[i] = 1.0f;
+  }
 
   return cubes;
 }

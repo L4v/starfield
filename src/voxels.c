@@ -81,15 +81,6 @@ void __initBuffers(Voxels *voxels) {
   __bufferInstanceData(voxels);
 }
 
-Voxels sfCreateVoxels(unsigned count) {
-  Voxels voxels = {0};
-  voxels.count = count;
-  voxels.transforms = calloc(count, sizeof(m44));
-  __initBuffers(&voxels);
-
-  return voxels;
-}
-
 void sfDestroyVoxels(Voxels *voxels) { free(voxels->transforms); }
 
 void sfRenderVoxels(const Voxels *voxels) {

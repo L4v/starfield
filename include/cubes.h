@@ -6,13 +6,13 @@
 
 typedef struct {
   unsigned count;
-  float *speeds;
+  float *masses;
+  float *sizes;
 
   v3 *positions;
   v3 *velocities;
   v3 *accelerations;
 } Cubes;
 
-Cubes sfCreateCubes(unsigned count);
 void sfDestroyCubes(Cubes *cubes);
 Cubes *sfCubesArenaAlloc(Arena *arena, unsigned count);

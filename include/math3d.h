@@ -181,6 +181,10 @@ L4VDEF v3 v3_lerp(const v3 a, const v3 b, float t) {
   return v3_add(scaled_a, scaled_b);
 }
 
+L4VDEF int v3_cmp(const v3 a, const v3 b) {
+  return a.x == b.x && a.y == b.y && a.z == b.z;
+}
+
 struct v4 {
   union {
     float v[4];

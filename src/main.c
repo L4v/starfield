@@ -13,10 +13,7 @@
 #define NK_IMPLEMENTATION
 #include "arena.h"
 #include "cubes.h"
-#include "nuklear.h"
-#define G 9.81
-// #define CIMGUI_DEFINE_ENUMS_AND_STRUCTS
-// #include <cimgui.h>
+#include "octree.h"
 
 float randf() { return (float)rand() / RAND_MAX; }
 
@@ -94,6 +91,7 @@ void glfwKeyCallback(GLFWwindow *window, int key, int scancode, int action,
 void glfwCursorPosCallback(GLFWwindow *window, double xpos, double ypos) {
   Input *input = (Input *)glfwGetWindowUserPointer(window);
   Mouse *mouse = input->mouse;
+
   mouse->dx = mouse->x - xpos;
   mouse->x = xpos;
 
@@ -148,33 +146,78 @@ unsigned loadImageAsTexture(const char *filename) {
 void sfVoxelsFromCubes(Voxels *voxels, const Cubes *cubes) {
   for (int i = 0; i < cubes->count; ++i) {
     const v3 *position = &cubes->positions[i];
+    const float size = cubes->sizes[i];
     voxels->transforms[i] = m44_identity(1.0f);
 
     voxels->transforms[i] = translate(&voxels->transforms[i], position->x,
                                       position->y, position->z);
+    voxels->transforms[i] = scale(&voxels->transforms[i], size, size, size);
   }
 }
 
 // TODO(Jovan): Use arena
-GLuint generateColorTexture(int width, int height, int r, int g, int b) {
+GLuint generateColorTexture(int width, int height, int r, int g, int b, int a) {
   GLuint texture;
-  GLubyte *data = (GLubyte *)malloc(width * height * 3);
+  GLubyte *data = (GLubyte *)malloc(width * height * 4);
 
-  for (int i = 0; i < width * height * 3; i += 3) {
+  for (int i = 0; i < width * height * 4; i += 4) {
     data[i] = r;
     data[i + 1] = g;
     data[i + 2] = b;
+    data[i + 3] = a;
+
+    int pixelIndex = i / 4;
+    int x = pixelIndex % width;
+    int y = pixelIndex / width;
+
+    if (x == 0 || x == width - 1 || y == 0 || y == height - 1) {
+      data[i] = 255;
+      data[i + 1] = 255;
+      data[i + 2] = 255;
+      data[i + 3] = 255;
+    } else {
+      data[i] = r;
+      data[i + 1] = g;
+      data[i + 2] = b;
+      data[i + 3] = a;
+    }
   }
 
   glGenTextures(1, &texture);
   glBindTexture(GL_TEXTURE_2D, texture);
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-  glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, width, height, 0, GL_RGB,
+  glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_RGBA,
                GL_UNSIGNED_BYTE, data);
 
   free(data);
   return texture;
+}
+
+void initCircularOrbit(Cubes *cubes) {
+  float G = 1.0f;
+  float radius = 10.0f;
+
+  for (int i = 0; i < cubes->count; ++i) {
+    float theta = randf() * 2.0f * PI;
+    float phi = (randf() - 0.5f) * PI;
+    float r = radius * (0.5f + 0.5f * randf());
+    float mass = 1.0f;
+
+    float x = r * COS(phi) * COS(theta);
+    float y = r * COS(phi) * SIN(theta);
+    float z = r * SIN(phi);
+    cubes->positions[i] = (v3){x, y, z};
+    cubes->masses[i] = mass;
+    cubes->sizes[i] = 0.1f;
+
+    v3 radial = v3_norm((v3){x, y, z});
+    v3 axis = fabsf(radial.z) < 0.9f ? (v3){0, 0, 1} : (v3){1, 0, 0};
+    v3 tangent = v3_norm(v3_cross(axis, radial));
+
+    float v = sqrtf(G * mass / fmaxf(r, 1e-3f));
+    cubes->velocities[i] = v3_scale(tangent, v);
+  }
 }
 
 int main() {
@@ -194,8 +237,12 @@ int main() {
 
   Input *input = sfInputInit(&inputArena);
   glfwSetWindowUserPointer(window, input);
+  glfwGetCursorPos(window, &input->mouse->x, &input->mouse->y);
+
   glEnable(GL_DEPTH_TEST);
   glEnable(GL_CULL_FACE);
+  glEnable(GL_BLEND);
+  glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
   Arena cubesArena = sfArenaCreate(MEGABYTE, 100);
   Arena voxelsArena = sfArenaCreate(MEGABYTE, 100);
@@ -206,35 +253,17 @@ int main() {
   unsigned starVao, starVbo, starVertexCount, starInstanceCount;
   sfInitStarBuffers(&starVao, &starVbo, &starVertexCount, &starInstanceCount);
 
-  unsigned floorInstanceCount = 4096;
-
-  /* Voxels *floors = sfVoxelsArenaAlloc(&voxelsArena, floorInstanceCount); */
-  /* sfVoxelInitFloorInstances(floors); */
-  /* voxels[voxelsCount++] = floors; */
-
-  unsigned physCubeCount = 10;
-  Cubes *physCubes = sfCubesArenaAlloc(&cubesArena, physCubeCount);
-
-  float cubeAccelerationMag = 16.0f;
-  float cubeSpeed = 10.0f;
-
-  for (int i = 0; i < physCubes->count; ++i) {
-    physCubes->positions[i] = (v3){2.0f * i, 20.0f, 0.0f};
-    physCubes->speeds[i] = i + 1.0f;
-  }
+  Cubes *physCubes = sfCubesArenaAlloc(&cubesArena, 1000);
+  initCircularOrbit(physCubes);
 
   unsigned containerTexture = loadImageAsTexture("res/container.jpg");
-  unsigned redDebugTexture = generateColorTexture(64, 64, 255, 0, 0);
-  unsigned greenDebugTexture = generateColorTexture(64, 64, 0, 255, 0);
-  unsigned blueDebugTexture = generateColorTexture(64, 64, 0, 0, 255);
+  unsigned redDebugTexture = generateColorTexture(64, 64, 255, 0, 0, 64);
+  unsigned greenDebugTexture = generateColorTexture(64, 64, 0, 255, 0, 255);
+  unsigned blueDebugTexture = generateColorTexture(64, 64, 0, 0, 255, 255);
 
   Voxels *cubeVoxels = sfVoxelsArenaAlloc(&voxelsArena, physCubes->count);
   cubeVoxels->texture = containerTexture;
   voxels[voxelsCount++] = cubeVoxels;
-
-  v3 eye = {0.0f, 0.0f, 4.0f};
-  v3 center = {0.0f, 0.0f, 0.0f};
-  v3 up = {0.0f, 1.0f, 0.0f};
 
   int starProgram = createShaderProgram("shaders/basic.vs", "shaders/basic.fs");
   int voxelProgram =
@@ -259,54 +288,9 @@ int main() {
   char fovAnimTimeStart = time;
   float fovAnimTime = 0;
 
-  v3 X[4] = {{1.0f, 2.0f, 5.0f},
-             {5.0f, 2.0f, 5.0f},
-             {5.0f, 5.0f, 5.0f},
-             {1.0f, 5.0f, 5.0f}};
-
-  v3 Y[4] = {{2.0f, 3.0f, 5.0f},
-             {7.0f, 3.0f, 5.0f},
-             {7.0f, 8.0f, 5.0f},
-             {2.0f, 8.0f, 5.0f}};
-
-  v3 minkowskiDiff[16] = {0};
-  unsigned minkowskiIdx = 0;
-  for (int i = 0; i < 4; ++i) {
-    for (int j = 0; j < 4; ++j) {
-      minkowskiDiff[minkowskiIdx++] = v3_sub(X[i], Y[j]);
-    }
-  }
-
-  Voxels *minkowskiXVoxels = sfVoxelsArenaAlloc(&voxelsArena, 4);
-  minkowskiXVoxels->texture = greenDebugTexture;
-  voxels[voxelsCount++] = minkowskiXVoxels;
-  Voxels *minkowskiYVoxels = sfVoxelsArenaAlloc(&voxelsArena, 4);
-  minkowskiYVoxels->texture = blueDebugTexture;
-  voxels[voxelsCount++] = minkowskiYVoxels;
-  for (int i = 0; i < 4; ++i) {
-    m44 transform = m44_identity(1.0f);
-    v3 *position = &X[i];
-    transform = translate_v3(&transform, position);
-    transform = scale(&transform, 0.2, 0.2, 0.2);
-    minkowskiXVoxels->transforms[i] = transform;
-
-    transform = m44_identity(1.0f);
-    position = &Y[i];
-    transform = translate_v3(&transform, position);
-    transform = scale(&transform, 0.2, 0.2, 0.2);
-    minkowskiYVoxels->transforms[i] = transform;
-  }
-
-  Voxels *minkowskiVoxels = sfVoxelsArenaAlloc(&voxelsArena, 16);
-  for (int i = 0; i < 16; ++i) {
-    const v3 *position = &minkowskiDiff[i];
-    m44 transform = m44_identity(1.0f);
-    transform = translate_v3(&transform, position);
-    transform = scale(&transform, 0.2, 0.2, 0.2);
-    minkowskiVoxels->transforms[i] = transform;
-  }
-  minkowskiVoxels->texture = redDebugTexture;
-  voxels[voxelsCount++] = minkowskiVoxels;
+  Arena octreeArena = sfArenaCreate(MEGABYTE, 100);
+  Octree *octree =
+      sfOctreeArenaAlloc(&octreeArena, 1.0f, 1.0f, 8 * physCubes->count - 1);
 
   Keyboard *keyboard = input->keyboard;
   while (!glfwWindowShouldClose(window)) {
@@ -315,28 +299,53 @@ int main() {
     glfwPollEvents();
     sfUpdate(input, &camera, &player, dt);
 
+    // Calculate gravitational forces
+    // F = G * (m1 * m2) / r^2
+    // r = (p1 - p2)^2
+    // for (int i = 0; i < physCubes->count; ++i) {
+    //   v3 *position1 = &physCubes->positions[i];
+    //   v3 *accel1 = &physCubes->accelerations[i];
+    //   float mass1 = physCubes->masses[i];
+    //   for (int j = i + 1; j < physCubes->count; ++j) {
+    //     v3 *position2 = &physCubes->positions[j];
+    //     v3 *accel2 = &physCubes->accelerations[j];
+    //     float mass2 = physCubes->masses[j];
+    //
+    //     v3 r = v3_sub(*position2, *position1);
+    //     float len = v3_len(r);
+    //     v3 f = v3_scale(r, 1 / (fmaxf(len, 1e-2f) * len));
+    //
+    //     *accel1 = v3_add(*accel1, v3_scale(f, mass2));
+    //     *accel2 = v3_sub(*accel2, v3_scale(f, mass1));
+    //   }
+    // }
+
+    // Integrate Cube accelerations & velocities
     for (int i = 0; i < physCubes->count; ++i) {
-      // v3 *acceleration = &cubes.accelerations[i];
-      // v3_zero(acceleration);
-      // acceleration->y += -G * dt;
+      v3 *acceleration = &physCubes->accelerations[i];
+      v3 *velocity = &physCubes->velocities[i];
+      v3 *position = &physCubes->positions[i];
 
-      // v3 *velocity = &cubes.velocities[i];
-      // *velocity =
-      //     v3_add(*velocity, v3_scale(*acceleration, cubeAccelerationMag *
-      //     dt));
+      *velocity = v3_add(*velocity, v3_scale(*acceleration, dt));
 
-      // v3 *position = &cubes.positions[i];
-      // *position = v3_add(*position, v3_scale(*velocity, cubes.speeds[i] *
-      // dt));
+      *position = v3_add(*position, v3_scale(*velocity, dt));
+      v3_zero(acceleration);
+    }
 
-      // if (position->y < 1.5f) {
-      //   position->y = 1.5f;
-      //   v3_zero(velocity);
-      //   v3_zero(acceleration);
-      // }
-      float angle = fmod(time * (i + 1.0f), 2 * PI);
+    Octant initialOctant =
+        sfOctantContaining(physCubes->positions, physCubes->count);
+    sfOctreeClear(octree, &initialOctant);
 
-      physCubes->positions[i].y = SIN(angle) * 5.0f;
+    for (int i = 0; i < physCubes->count; ++i) {
+      const v3 position = physCubes->positions[i];
+      sfOctreeInsert(octree, position, physCubes->masses[i]);
+    }
+
+    printf("Octant count: %d\n", octree->count);
+    sfOctreePropagate(octree);
+    for (int i = 0; i < physCubes->count; ++i) {
+      physCubes->accelerations[i] =
+          sfOctreeAcceleration(octree, physCubes->positions[i]);
     }
 
     if (keyboard->toggleFly.isDoubleTap) {
@@ -359,8 +368,6 @@ int main() {
         fov = lerp(flyingFov, walkingFov, t);
       }
     }
-    // printf("anim direction: %d, animtime: %lf, fov: %lf\n", fovAnimDirection,
-    //        fovAnimTime, fov);
 
     glfwGetFramebufferSize(window, &windowWidth, &windowHeight);
     glViewport(0, 0, windowWidth, windowHeight);
@@ -369,8 +376,8 @@ int main() {
     glUseProgram(starProgram);
 
     setUniformFloat(starProgram, "time", time);
-    v3 center = v3_add(camera.position, camera.forward);
-    m44 view = lookAt(camera.position, center, camera.up);
+    v3 cameraCenter = v3_add(camera.position, camera.forward);
+    m44 view = lookAt(camera.position, cameraCenter, camera.up);
     m44 projection =
         perspective(fov, windowWidth / (float)windowHeight, 0.1f, 1000.0f);
 
@@ -385,7 +392,7 @@ int main() {
     setUniformM44(voxelProgram, "projection", &projection);
     setUniformM44(voxelProgram, "view", &view);
 
-    /* sfVoxelsFromCubes(cubeVoxels, physCubes); */
+    sfVoxelsFromCubes(cubeVoxels, physCubes);
 
     // Render voxel arena
     for (int i = 0; i < voxelsCount; ++i) {

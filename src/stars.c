@@ -1,5 +1,31 @@
 #include "stars.h"
 
+void sfStarsDestroy(Stars *stars) {
+  free(stars->sizes);
+  free(stars->masses);
+  free(stars->positions);
+  free(stars->velocities);
+  free(stars->accelerations);
+}
+
+Stars *sfStarsArenaAlloc(Arena *arena, unsigned count) {
+  Stars *stars = (Stars *)sfArenaAlloc(arena, sizeof(Stars));
+
+  stars->count = count;
+
+  stars->masses = (float *)sfArenaAlloc(arena, sizeof(float) * stars->count);
+  stars->sizes = (float *)sfArenaAlloc(arena, sizeof(float) * stars->count);
+  stars->positions = (v3 *)sfV3ArenaAlloc(arena, stars->count);
+  stars->velocities = (v3 *)sfV3ArenaAlloc(arena, stars->count);
+  stars->accelerations = (v3 *)sfV3ArenaAlloc(arena, stars->count);
+
+  for (int i = 0; i < stars->count; ++i) {
+    stars->sizes[i] = 1.0f;
+  }
+
+  return stars;
+}
+
 void _initStarInstanceData(m44 *data, int numInstances) {
   v3 positions[MAX_STARS];
   for (int i = 0; i < numInstances; ++i) {

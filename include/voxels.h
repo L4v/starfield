@@ -139,7 +139,6 @@ static v2 texCoords[VERTEX_COUNT] = {
 void __bufferInstanceData(Voxels *voxels);
 void __initBuffers(Voxels *voxels);
 
-Voxels sfCreateVoxels(unsigned count);
 void sfDestroyVoxels(Voxels *voxels);
 void sfVoxelInitFloorInstances(const Voxels *voxels);
 void sfRenderVoxels(const Voxels *voxels);
