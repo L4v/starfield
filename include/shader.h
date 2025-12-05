@@ -10,7 +10,9 @@ int checkShaderCompilation(GLuint shader, const char *shaderTypeStr);
 int checkProgramLinking(GLuint program);
 GLuint createShaderProgram(const char *vertexPath, const char *fragmentPath);
 
+void setUniformI1(int program, const char *uniform, int i);
 void setUniformM44(int program, const char *uniform, const m44 *m);
 void setUniformFloat(int program, const char *uniform, float f);
+void setUniformF3(int program, const char *uniform, float r, float g, float b);
 void setUniformF4(int program, const char *uniform, float r, float g, float b,
                   float a);

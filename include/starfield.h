@@ -12,7 +12,7 @@ typedef struct {
 
 typedef struct {
   union {
-    Key keys[11];
+    Key keys[12];
     struct {
       Key moveLeft;
       Key moveRight;
@@ -27,6 +27,8 @@ typedef struct {
       Key lookDown;
 
       Key toggleFly;
+
+      Key debugStep;
     };
   };
 } Keyboard;

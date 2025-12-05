@@ -42,7 +42,7 @@ void __bufferInstanceData(Voxels *voxels) {
   glGenBuffers(1, &voxels->transformsVbo);
   glBindBuffer(GL_ARRAY_BUFFER, voxels->transformsVbo);
   glBufferData(GL_ARRAY_BUFFER, voxels->count * sizeof(m44), voxels->transforms,
-               GL_STATIC_DRAW);
+               GL_DYNAMIC_DRAW);
   for (unsigned int i = 0; i < 4; ++i) {
     glVertexAttribPointer(INSTANCE_TRANSFORM_LOCATION + i, 4, GL_FLOAT,
                           GL_FALSE, sizeof(m44), (void *)(sizeof(v4) * i));
@@ -55,14 +55,13 @@ void __bufferInstanceData(Voxels *voxels) {
 }
 
 void __initBuffers(Voxels *voxels) {
-  float bufferData[5 * VERTEX_COUNT];
+  float bufferData[ATTRIBUTE_COUNT * VERTEX_COUNT];
   for (int i = 0; i < VERTEX_COUNT; i++) {
-    bufferData[i * 5 + 0] = vertices[i].x;
-    bufferData[i * 5 + 1] = vertices[i].y;
-    bufferData[i * 5 + 2] = vertices[i].z;
-
-    bufferData[i * 5 + 3] = texCoords[i].x;
-    bufferData[i * 5 + 4] = texCoords[i].y;
+    bufferData[i * ATTRIBUTE_COUNT + 0] = vertices[i].x;
+    bufferData[i * ATTRIBUTE_COUNT + 1] = vertices[i].y;
+    bufferData[i * ATTRIBUTE_COUNT + 2] = vertices[i].z;
+    bufferData[i * ATTRIBUTE_COUNT + 3] = texCoords[i].x;
+    bufferData[i * ATTRIBUTE_COUNT + 4] = texCoords[i].y;
   }
 
   glGenVertexArrays(1, &voxels->vao);

@@ -97,6 +97,10 @@ GLuint createShaderProgram(const char *vertexPath, const char *fragmentPath) {
   return program;
 }
 
+void setUniformI1(int program, const char *uniform, int i) {
+  glUniform1i(glGetUniformLocation(program, uniform), i);
+}
+
 void setUniformM44(int program, const char *uniform, const m44 *m) {
   glUniformMatrix4fv(glGetUniformLocation(program, uniform), 1, GL_FALSE,
                      (float *)m);
@@ -104,6 +108,10 @@ void setUniformM44(int program, const char *uniform, const m44 *m) {
 
 void setUniformFloat(int program, const char *uniform, float f) {
   glUniform1f(glGetUniformLocation(program, uniform), f);
+}
+
+void setUniformF3(int program, const char *uniform, float r, float g, float b) {
+  glUniform3f(glGetUniformLocation(program, uniform), r, g, b);
 }
 
 void setUniformF4(int program, const char *uniform, float r, float g, float b,

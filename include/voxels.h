@@ -1,3 +1,5 @@
+#ifndef VOXELS_H
+#define VOXELS_H
 #include "arena.h"
 #include "math3d.h"
 #include <glad/glad.h>
@@ -6,6 +8,7 @@
 
 #define MAX_VOXELS 4096
 #define VERTEX_COUNT 36
+#define ATTRIBUTE_COUNT 5
 
 const static unsigned VERTEX_POSITION_LOCATION = 0;
 const static unsigned TEX_COORD_LOCATION = 1;
@@ -145,3 +148,4 @@ void sfRenderVoxels(const Voxels *voxels);
 void sfUpdateVoxelTransforms(Voxels *voxels, const v3 *positions);
 
 Voxels *sfVoxelsArenaAlloc(Arena *arena, unsigned count);
+#endif

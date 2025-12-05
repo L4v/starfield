@@ -1,4 +1,5 @@
 #include "octree.h"
+#include <math.h>
 
 Octree *sfOctreeArenaAlloc(Arena *arena, float theta, float epsilon,
                            unsigned maxCount) {
@@ -161,16 +162,18 @@ void sfOctreePropagate(Octree *octree) {
 v3 sfOctreeAcceleration(const Octree *octree, const v3 position) {
   v3 acceleration = v3_0();
   unsigned node = 0;
+  const float squaredSoftening = 40.0f;
 
   while (1) {
     v3 d = v3_sub(octree->positions[node], position);
     float distance = v3_len(d);
     float distanceSquared = distance * distance;
 
-    float octantSizeSquared =
-        octree->octants[node].size * octree->octants[node].size;
+    float sizeSquared = octree->octants[node].size * octree->octants[node].size;
+    // is leaf or satisfies criterion
     if (octree->children[node] == 0 ||
-        octantSizeSquared < distanceSquared * octree->thetaSquared) { // is leaf
+        sizeSquared < distanceSquared * octree->thetaSquared) {
+
       float denom = (distanceSquared + octree->epsilonSquared) * distance;
       v3 inc = v3_scale(d, fminf((octree->masses[node] / denom), FLT_MAX));
       acceleration = v3_add(acceleration, inc);
