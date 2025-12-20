@@ -270,14 +270,14 @@ void updatePhysics(Octree *octree, v3 *positions, v3 *velocities,
   }
 
   // Integrate accelerations & velocities
-  for (int i = 0; i < bodyCount; ++i) {
+  for (int i = 1; i < bodyCount; ++i) {
     v3 *acceleration = &accelerations[i];
     v3 *velocity = &velocities[i];
     v3 *position = &positions[i];
 
     *velocity = v3_add(*velocity, v3_scale(*acceleration, dt));
-
     *position = v3_add(*position, v3_scale(*velocity, dt));
+
     v3_zero(acceleration);
   }
 }
@@ -318,10 +318,23 @@ int main() {
   unsigned starVao, starVbo, starVertexCount, starInstanceCount;
   sfInitStarBuffers(&starVao, &starVbo, &starVertexCount, &starInstanceCount);
 
-  Cubes *physCubes = sfCubesArenaAlloc(&cubesArena, 10000);
+  Cubes *physCubes = sfCubesArenaAlloc(&cubesArena, 2);
 
   v3 worldDimensions = v3_make(5.0f, 5.0f, 5.0f);
-  initCircularOrbit(physCubes, worldDimensions);
+  // initCircularOrbit(physCubes, worldDimensions);
+
+  physCubes->positions[0] = v3_0();
+  physCubes->velocities[0] = v3_0();
+  physCubes->masses[0] = 100.0f;
+  physCubes->sizes[0] = 1.0f;
+
+  physCubes->positions[1] = v3_make(5.0f, 0.0f, 0.0f);
+  float r = v3_len(v3_sub(physCubes->positions[1], physCubes->positions[0]));
+  float G = 6.6743;
+  physCubes->velocities[1] =
+      v3_scale(v3_make(0.0f, 1.0f, 0.0f), sqrtf(physCubes->masses[0] * G / r));
+  physCubes->masses[1] = 1.0f;
+  physCubes->sizes[1] = 0.1f;
 
   Particles *particles =
       sfParticlesArenaAlloc(&particlesArena, physCubes->count);
@@ -474,8 +487,11 @@ int main() {
       fps = 1.0f / dt;
     }
     snprintf(windowTitle, 128, "FPS: %0.1f", fps);
-    printf("Frame Time: (dt): %fms | Physics Time: %fms\n", dt * 1000.0f,
-           physicsTime * 1000.0f);
+    // printf("Frame Time: (dt): %fms | Physics Time: %fms\n", dt * 1000.0f,
+    //        physicsTime * 1000.0f);
+
+    printf("r: %f\n",
+           v3_len(v3_sub(physCubes->positions[1], physCubes->positions[0])));
 
     glfwSetWindowTitle(window, windowTitle);
   }
