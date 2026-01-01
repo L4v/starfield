@@ -1,3 +1,5 @@
+#ifndef STARFIELD_H
+#define STARFIELD_H
 #include "arena.h"
 #include "camera.h"
 
@@ -47,6 +49,12 @@ typedef struct {
 } Input;
 
 typedef struct {
+  int fbw;
+  int fbh;
+  Input *input;
+} State;
+
+typedef struct {
   v3 position;
   float movementSpeed;
   v3 velocity;
@@ -59,9 +67,12 @@ void sfUpdatePlayer(Player *player, float dt);
 void sfUpdate(Input *input, Camera *camera, Player *player, float dt);
 // TODO(Jovan): Make macro abstraction of simple inits
 void sfPlayerInit(Player *player);
-Input *sfInputInit(Arena *arena);
+Input *sfInputArenaAlloc(Arena *arena);
 void sfInputClearControllers(Input *input);
 Keyboard *sfKeyboardInit(Arena *arena);
 void sfKeyboardClearIsDown(Keyboard *keyboard);
 Mouse *sfMouseInit(Arena *arena);
 void sfMouseClearDeltas(Mouse *mouse);
+
+State *sfStateArenaAlloc(Arena *arena);
+#endif
