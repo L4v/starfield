@@ -114,7 +114,7 @@ void sfMouseClearDeltas(Mouse *mouse) {
   mouse->dy = 0.0;
 }
 
-Input *sfInputInit(Arena *arena) {
+Input *sfInputArenaAlloc(Arena *arena) {
   Input *input = (Input *)sfArenaAlloc(arena, sizeof(Input));
   input->keyboard = sfKeyboardInit(arena);
   input->mouse = sfMouseInit(arena);
@@ -125,4 +125,10 @@ Input *sfInputInit(Arena *arena) {
 void sfInputClearControllers(Input *input) {
   sfKeyboardClearIsDown(input->keyboard);
   sfMouseClearDeltas(input->mouse);
+}
+
+State *sfStateArenaAlloc(Arena *arena) {
+  State *state = (State *)sfArenaAlloc(arena, sizeof(State));
+  state->input = sfInputArenaAlloc(arena);
+  return state;
 }

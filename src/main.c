@@ -9,12 +9,11 @@
 #include <stdio.h>
 #include <stdlib.h>
 #define STB_IMAGE_IMPLEMENTATION
-#include "stb_image.h"
-#define NK_IMPLEMENTATION
 #include "arena.h"
 #include "cubes.h"
 #include "octree.h"
 #include "particles.h"
+#include "stb_image.h"
 #include <time.h>
 
 float randf() { return (float)rand() / RAND_MAX; }
@@ -298,7 +297,7 @@ int main() {
   gladLoadGLLoader((GLADloadproc)glfwGetProcAddress);
   glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
 
-  Input *input = sfInputInit(&inputArena);
+  Input *input = sfInputArenaAlloc(&inputArena);
   glfwSetWindowUserPointer(window, input);
   glfwGetCursorPos(window, &input->mouse->x, &input->mouse->y);
 
@@ -498,6 +497,7 @@ int main() {
 
   sfArenaFree(&voxelsArena);
   sfArenaFree(&cubesArena);
+  sfArenaFree(&inputArena);
 
   glfwDestroyWindow(window);
   glfwTerminate();

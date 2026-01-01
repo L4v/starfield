@@ -633,9 +633,9 @@ L4VDEF m44 frustum(float left, float right, float bottom, float top, float near,
 
 L4VDEF m44 orthographic(float left, float right, float bottom, float top,
                         float near, float far) {
-  float SX = 2.0f / (left - right);
+  float SX = 2.0f / (right - left);
   float SY = 2.0f / (top - bottom);
-  float SZ = 2.0f / (far - near);
+  float SZ = -2.0f / (far - near);
   float TX = -(right + left) / (right - left);
   float TY = -(top + bottom) / (top - bottom);
   float TZ = -(far + near) / (far - near);
