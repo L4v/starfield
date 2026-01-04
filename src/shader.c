@@ -106,12 +106,16 @@ void setUniformM44(int program, const char *uniform, const m44 *m) {
                      (float *)m);
 }
 
-void setUniformFloat(int program, const char *uniform, float f) {
+void setUniformF1(int program, const char *uniform, float f) {
   glUniform1f(glGetUniformLocation(program, uniform), f);
 }
 
 void setUniformF3(int program, const char *uniform, float r, float g, float b) {
   glUniform3f(glGetUniformLocation(program, uniform), r, g, b);
+}
+
+void setUniformV3(int program, const char *uniform, const v3 *v) {
+  glUniform3fv(glGetUniformLocation(program, uniform), 1, v->v);
 }
 
 void setUniformF4(int program, const char *uniform, float r, float g, float b,

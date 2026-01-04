@@ -1,4 +1,5 @@
 #include "starfield.h"
+#include "math3d.h"
 
 Player *sfPlayerArenaAlloc(Arena *arena) {
   Player *player = (Player *)sfArenaAlloc(arena, sizeof(Player));
@@ -15,7 +16,7 @@ void sfPlayerMove(Player *player, const v3 *direction) {
       v3_add(player->velocity, v3_scale(*direction, player->movementSpeed));
 }
 
-void sfUpdate(State *state, Cubes *cubes) {
+void sfUpdate(State *state, Cubes *cubes, Particles *snow) {
   const Input *input = state->input;
   const Keyboard *keyboard = input->keyboard;
   Player *player = state->player;
@@ -85,6 +86,21 @@ void sfUpdate(State *state, Cubes *cubes) {
 
   if (mouse->dy) {
     sfCameraRotatePitch(camera, mouse->dy * 10.0, dt);
+  }
+
+  for (int i = 0; i < snow->count; ++i) {
+    snow->ttls[i] -= dt;
+    float ttl = snow->ttls[i];
+    if (ttl <= 0.0f) {
+      snow->ttls[i] = randf_clamped(4.0f, 10.0f);
+      snow->positions[i] =
+          v3_make(randf_clamped(0.0f, 256.0f), randf_clamped(100.0f, 128.0f),
+                  randf_clamped(0.0f, 256.0f));
+      snow->velocities[i] = v3_make(0.0f, -randf_clamped(0.1f, 10.0f), 0.0f);
+      continue;
+    }
+    snow->positions[i] =
+        v3_add(snow->positions[i], v3_scale(snow->velocities[i], dt));
   }
 
   player->position = v3_add(player->position, v3_scale(player->velocity, dt));

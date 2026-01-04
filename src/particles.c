@@ -39,6 +39,7 @@ void initBuffers(Particles *particles) {
 Particles *sfParticlesArenaAlloc(Arena *arena, unsigned int count) {
   Particles *particles = (Particles *)sfArenaAlloc(arena, sizeof(Particles));
   particles->count = count;
+  particles->ttls = sfArenaAlloc(arena, sizeof(float) * particles->count);
   particles->positions = sfV3ArenaAlloc(arena, count);
   particles->velocities = sfV3ArenaAlloc(arena, count);
 

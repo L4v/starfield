@@ -35,7 +35,8 @@ vec4 getParticleColor(){
 }
 
 void main() {
-   fragColor = getParticleColor();
+   //fragColor = getParticleColor(); // Snow lol
+   fragColor = vec4(1.0f);
 
     vec2 pos = 2.0 * gl_PointCoord.xy - 1.0f;
     if(dot(pos,pos) > 0.25 && fs_in.particleSize > 3.0){

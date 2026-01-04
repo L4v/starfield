@@ -14,6 +14,7 @@ typedef struct {
   unsigned velocitiesVbo;
   unsigned count;
 
+  float *ttls;
   v3 *positions;
   v3 *velocities;
 } Particles;

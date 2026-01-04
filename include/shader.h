@@ -12,7 +12,8 @@ GLuint createShaderProgram(const char *vertexPath, const char *fragmentPath);
 
 void setUniformI1(int program, const char *uniform, int i);
 void setUniformM44(int program, const char *uniform, const m44 *m);
-void setUniformFloat(int program, const char *uniform, float f);
+void setUniformF1(int program, const char *uniform, float f);
 void setUniformF3(int program, const char *uniform, float r, float g, float b);
+void setUniformV3(int program, const char *uniform, const v3 *v);
 void setUniformF4(int program, const char *uniform, float r, float g, float b,
                   float a);

@@ -3,6 +3,7 @@
 #include "arena.h"
 #include "camera.h"
 #include "cubes.h"
+#include "particles.h"
 
 #define sfInit(type, arena) ((type *)sfArenaAlloc((arena), sizeof(type)))
 
@@ -68,7 +69,7 @@ typedef struct {
 
 void sfPlayerMove(Player *player, const v3 *direction);
 
-void sfUpdate(State *state, Cubes *world);
+void sfUpdate(State *state, Cubes *world, Particles *snow);
 // TODO(Jovan): Make macro abstraction of simple inits
 Player *sfPlayerArenaAlloc(Arena *arena);
 Input *sfInputArenaAlloc(Arena *arena);

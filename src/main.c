@@ -1,5 +1,7 @@
+#include "arena.h"
 #include "cubes.h"
 #include "math3d.h"
+#include "particles.h"
 #include "voxels.h"
 #include <glad/glad.h>
 #define GLFW_INCLUDE_NONE
@@ -160,8 +162,8 @@ GLuint generateColorTexture(int width, int height, int r, int g, int b, int a) {
   return texture;
 }
 
-void sfRender(const State *state, const Voxels *voxels,
-              unsigned voxelsProgram) {
+void sfRender(const State *state, const Voxels *voxels, unsigned voxelsProgram,
+              const Particles *snow, unsigned snowProgram) {
 
   Camera *camera = state->camera;
   m44 view = sfCameraLookAt(camera);
@@ -172,6 +174,15 @@ void sfRender(const State *state, const Voxels *voxels,
   setUniformM44(voxelsProgram, "projection", &projection);
   setUniformM44(voxelsProgram, "view", &view);
   sfRenderVoxels(voxels);
+
+  glUseProgram(snowProgram);
+  setUniformM44(snowProgram, "projection", &projection);
+  setUniformM44(snowProgram, "view", &view);
+  setUniformV3(snowProgram, "cameraPos", &state->camera->position);
+  setUniformI1(snowProgram, "totalParticles", snow->count);
+  setUniformF1(snowProgram, "worldSize", 256.0f);
+  sfParticlesRender(snow);
+
   glUseProgram(0);
   glBindVertexArray(0);
   glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
@@ -290,12 +301,15 @@ int main() {
   Arena stateArena = sfArenaCreate(MEGABYTE, 1);
   Arena voxelsArena = sfArenaCreate(MEGABYTE, 100);
   Arena cubesArena = sfArenaCreate(MEGABYTE, 100);
+  Arena particlesArena = sfArenaCreate(MEGABYTE, 1);
 
   State *state = sfStateArenaAlloc(&stateArena);
   Input *input = state->input;
 
   Cubes *cubes = sfCubesArenaAlloc(&cubesArena, 65536);
   Voxels *voxels = sfVoxelsArenaAlloc(&voxelsArena, cubes->count);
+  Particles *snowParticles = sfParticlesArenaAlloc(&particlesArena, 10000);
+
   voxels->texture = generateColorTexture(64, 64, 16, 64, 16, 255);
 
   unsigned cols = 256;
@@ -336,6 +350,8 @@ int main() {
 
   unsigned voxelsProgram =
       createShaderProgram("shaders/voxels.vs", "shaders/voxels.fs");
+  unsigned particlesProgram =
+      createShaderProgram("shaders/particles.vs", "shaders/particles.fs");
 
   glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
   glEnable(GL_DEPTH_TEST);
@@ -356,7 +372,7 @@ int main() {
       cubes->debugCollision[i] = 0;
     }
 
-    sfUpdate(state, cubes);
+    sfUpdate(state, cubes, snowParticles);
 
     for (int i = 0; i < cubes->count; ++i) {
       v3 *p = &cubes->positions[i];
@@ -367,7 +383,7 @@ int main() {
           cubes->debugCollision[i] ? v4_make(1.0f, 0.0f, 0.0f, 0.5f) : v4_0();
     }
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-    sfRender(state, voxels, voxelsProgram);
+    sfRender(state, voxels, voxelsProgram, snowParticles, particlesProgram);
 
     glfwSwapBuffers(window);
 
@@ -386,5 +402,6 @@ int main() {
   sfArenaFree(&stateArena);
   sfArenaFree(&voxelsArena);
   sfArenaFree(&cubesArena);
+  sfArenaFree(&particlesArena);
   return 0;
 }
