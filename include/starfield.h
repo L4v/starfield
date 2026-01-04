@@ -2,6 +2,7 @@
 #define STARFIELD_H
 #include "arena.h"
 #include "camera.h"
+#include "cubes.h"
 
 #define sfInit(type, arena) ((type *)sfArenaAlloc((arena), sizeof(type)))
 
@@ -49,24 +50,27 @@ typedef struct {
 } Input;
 
 typedef struct {
-  int fbw;
-  int fbh;
-  Input *input;
-} State;
-
-typedef struct {
   v3 position;
   float movementSpeed;
   v3 velocity;
+  float height;
   unsigned char isFlying;
 } Player;
 
-void sfMovePlayer(Player *player, const v3 *direction);
-void sfUpdatePlayer(Player *player, float dt);
+typedef struct {
+  int fbw;
+  int fbh;
+  float dt;
+  Player *player;
+  Camera *camera;
+  Input *input;
+} State;
 
-void sfUpdate(Input *input, Camera *camera, Player *player, float dt);
+void sfPlayerMove(Player *player, const v3 *direction);
+
+void sfUpdate(State *state, Cubes *world);
 // TODO(Jovan): Make macro abstraction of simple inits
-void sfPlayerInit(Player *player);
+Player *sfPlayerArenaAlloc(Arena *arena);
 Input *sfInputArenaAlloc(Arena *arena);
 void sfInputClearControllers(Input *input);
 Keyboard *sfKeyboardInit(Arena *arena);

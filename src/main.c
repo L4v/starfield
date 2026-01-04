@@ -1,22 +1,20 @@
+#include "cubes.h"
+#include "math3d.h"
+#include "voxels.h"
 #include <glad/glad.h>
 #define GLFW_INCLUDE_NONE
-#include "math3d.h"
 #include "shader.h"
 #include "starfield.h"
-#include "stars.h"
-#include "voxels.h"
 #include <GLFW/glfw3.h>
 #include <stdio.h>
-#include <stdlib.h>
-#define STB_IMAGE_IMPLEMENTATION
-#include "arena.h"
-#include "cubes.h"
-#include "octree.h"
-#include "particles.h"
-#include "stb_image.h"
-#include <time.h>
 
-float randf() { return (float)rand() / RAND_MAX; }
+void glfwFramebufferSizeCallback(GLFWwindow *window, int width, int height) {
+  State *state = (State *)glfwGetWindowUserPointer(window);
+  state->fbw = width;
+  state->fbh = height;
+
+  glViewport(0, 0, width, height);
+}
 
 void glfwErrorCallback(int error, const char *description) {
   fprintf(stderr, "GLFW Error: %s\n", description);
@@ -43,7 +41,8 @@ void processKeyEvent(Key *key, unsigned char isDown) {
 void glfwKeyCallback(GLFWwindow *window, int key, int scancode, int action,
                      int mods) {
 
-  Input *input = (Input *)glfwGetWindowUserPointer(window);
+  State *state = (State *)glfwGetWindowUserPointer(window);
+  Input *input = state->input;
   Keyboard *keyboard = input->keyboard;
   unsigned char isDown = action == GLFW_PRESS;
 
@@ -93,7 +92,8 @@ void glfwKeyCallback(GLFWwindow *window, int key, int scancode, int action,
 }
 
 void glfwCursorPosCallback(GLFWwindow *window, double xpos, double ypos) {
-  Input *input = (Input *)glfwGetWindowUserPointer(window);
+  State *state = (State *)glfwGetWindowUserPointer(window);
+  Input *input = state->input;
   Mouse *mouse = input->mouse;
 
   mouse->dx = mouse->x - xpos;
@@ -122,44 +122,6 @@ GLFWwindow *initGlfwWindow(int width, int height) {
   return window;
 }
 
-unsigned loadImageAsTexture(const char *filename) {
-  stbi_set_flip_vertically_on_load(1);
-  int texWidth, texHeight, texChannels;
-  unsigned char *texData =
-      stbi_load(filename, &texWidth, &texHeight, &texChannels, 0);
-  if (!texData) {
-    fprintf(stderr, "ERROR: Failed to load texture\n");
-  }
-
-  unsigned texture;
-  glGenTextures(1, &texture);
-
-  glBindTexture(GL_TEXTURE_2D, texture);
-  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
-  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
-  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER,
-                  GL_LINEAR_MIPMAP_LINEAR);
-  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-  glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, texWidth, texHeight, 0, GL_RGB,
-               GL_UNSIGNED_BYTE, texData);
-  glGenerateMipmap(GL_TEXTURE_2D);
-  stbi_image_free(texData);
-  return texture;
-}
-
-void sfVoxelsFromCubes(Voxels *voxels, const Cubes *cubes) {
-  for (int i = 0; i < cubes->count; ++i) {
-    const v3 *position = &cubes->positions[i];
-    const float size = cubes->sizes[i];
-    voxels->transforms[i] = m44_identity(1.0f);
-
-    voxels->transforms[i] = translate(&voxels->transforms[i], position->x,
-                                      position->y, position->z);
-    voxels->transforms[i] = scale(&voxels->transforms[i], size, size, size);
-  }
-}
-
-// TODO(Jovan): Use arena
 GLuint generateColorTexture(int width, int height, int r, int g, int b, int a) {
   GLuint texture;
   GLubyte *data = (GLubyte *)malloc(width * height * 4);
@@ -175,9 +137,9 @@ GLuint generateColorTexture(int width, int height, int r, int g, int b, int a) {
     int y = pixelIndex / width;
 
     if (x == 0 || x == width - 1 || y == 0 || y == height - 1) {
-      data[i] = 255;
-      data[i + 1] = 255;
-      data[i + 2] = 255;
+      data[i] = 128;
+      data[i + 1] = 128;
+      data[i + 2] = 128;
       data[i + 3] = 255;
     } else {
       data[i] = r;
@@ -198,93 +160,122 @@ GLuint generateColorTexture(int width, int height, int r, int g, int b, int a) {
   return texture;
 }
 
-v3 v3_rand_clamp(float min, float max) {
-  return v3_make(randf_clamped(min, max), randf_clamped(min, max),
-                 randf_clamped(min, max));
+void sfRender(const State *state, const Voxels *voxels,
+              unsigned voxelsProgram) {
+
+  Camera *camera = state->camera;
+  m44 view = sfCameraLookAt(camera);
+  m44 projection =
+      perspective(camera->fov, state->fbw / (float)state->fbh, 0.1f, 1000.0f);
+
+  glUseProgram(voxelsProgram);
+  setUniformM44(voxelsProgram, "projection", &projection);
+  setUniformM44(voxelsProgram, "view", &view);
+  sfRenderVoxels(voxels);
+  glUseProgram(0);
+  glBindVertexArray(0);
+  glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
 }
 
-void initCircularOrbit(Cubes *cubes, v3 worldDimensions) {
+// Doubled to avoid overflow. Original had 256 values
+int p[512] = {
+    151, 160, 137, 91,  90,  15,  131, 13,  201, 95,  96,  53,  194, 233, 7,
+    225, 140, 36,  103, 30,  69,  142, 8,   99,  37,  240, 21,  10,  23,  190,
+    6,   148, 247, 120, 234, 75,  0,   26,  197, 62,  94,  252, 219, 203, 117,
+    35,  11,  32,  57,  177, 33,  88,  237, 149, 56,  87,  174, 20,  125, 136,
+    171, 168, 68,  175, 74,  165, 71,  134, 139, 48,  27,  166, 77,  146, 158,
+    231, 83,  111, 229, 122, 60,  211, 133, 230, 220, 105, 92,  41,  55,  46,
+    245, 40,  244, 102, 143, 54,  65,  25,  63,  161, 1,   216, 80,  73,  209,
+    76,  132, 187, 208, 89,  18,  169, 200, 196, 135, 130, 116, 188, 159, 86,
+    164, 100, 109, 198, 173, 186, 3,   64,  52,  217, 226, 250, 124, 123, 5,
+    202, 38,  147, 118, 126, 255, 82,  85,  212, 207, 206, 59,  227, 47,  16,
+    58,  17,  182, 189, 28,  42,  223, 183, 170, 213, 119, 248, 152, 2,   44,
+    154, 163, 70,  221, 153, 101, 155, 167, 43,  172, 9,   129, 22,  39,  253,
+    19,  98,  108, 110, 79,  113, 224, 232, 178, 185, 112, 104, 218, 246, 97,
+    228, 251, 34,  242, 193, 238, 210, 144, 12,  191, 179, 162, 241, 81,  51,
+    145, 235, 249, 14,  239, 107, 49,  192, 214, 31,  181, 199, 106, 157, 184,
+    84,  204, 176, 115, 121, 50,  45,  127, 4,   150, 254, 138, 236, 205, 93,
+    222, 114, 67,  29,  24,  72,  243, 141, 128, 195, 78,  66,  215, 61,  156,
+    180, 151, 160, 137, 91,  90,  15,  131, 13,  201, 95,  96,  53,  194, 233,
+    7,   225, 140, 36,  103, 30,  69,  142, 8,   99,  37,  240, 21,  10,  23,
+    190, 6,   148, 247, 120, 234, 75,  0,   26,  197, 62,  94,  252, 219, 203,
+    117, 35,  11,  32,  57,  177, 33,  88,  237, 149, 56,  87,  174, 20,  125,
+    136, 171, 168, 68,  175, 74,  165, 71,  134, 139, 48,  27,  166, 77,  146,
+    158, 231, 83,  111, 229, 122, 60,  211, 133, 230, 220, 105, 92,  41,  55,
+    46,  245, 40,  244, 102, 143, 54,  65,  25,  63,  161, 1,   216, 80,  73,
+    209, 76,  132, 187, 208, 89,  18,  169, 200, 196, 135, 130, 116, 188, 159,
+    86,  164, 100, 109, 198, 173, 186, 3,   64,  52,  217, 226, 250, 124, 123,
+    5,   202, 38,  147, 118, 126, 255, 82,  85,  212, 207, 206, 59,  227, 47,
+    16,  58,  17,  182, 189, 28,  42,  223, 183, 170, 213, 119, 248, 152, 2,
+    44,  154, 163, 70,  221, 153, 101, 155, 167, 43,  172, 9,   129, 22,  39,
+    253, 19,  98,  108, 110, 79,  113, 224, 232, 178, 185, 112, 104, 218, 246,
+    97,  228, 251, 34,  242, 193, 238, 210, 144, 12,  191, 179, 162, 241, 81,
+    51,  145, 235, 249, 14,  239, 107, 49,  192, 214, 31,  181, 199, 106, 157,
+    184, 84,  204, 176, 115, 121, 50,  45,  127, 4,   150, 254, 138, 236, 205,
+    93,  222, 114, 67,  29,  24,  72,  243, 141, 128, 195, 78,  66,  215, 61,
+    156, 180,
+};
 
-  float radius = v3_len(worldDimensions) / 3.0f;
-  float minLen = 1e-6;
-  v3 center = v3_0();
-  float worldVolume = worldDimensions.x * worldDimensions.y * worldDimensions.z;
-  float baseMass =
-      (cubes->count > 0) ? (worldVolume / cubes->count) * 0.5f : 1.0f;
-  // float baseSpeed = v3_len(worldDimensions) / .5f;
-  float baseSpeed = 7.0f;
-  v3 orbitAxis = v3_norm(v3_make(0.2f, 1.0f, -0.1f));
+v2 randomGrad(int ix, int iy) {
+  const unsigned w = 8 * sizeof(unsigned);
+  const unsigned s = w / 2;
+  unsigned a = ix;
+  unsigned b = iy;
+  a *= 3284157443;
+  b ^= a << s | a >> (w - s);
+  b *= 1911520717;
 
-  for (int i = 0; i < cubes->count; ++i) {
-    v3 position = v3_rand_clamp(-1.0f, 1.0f);
-    float lenSq = v3_dot(position, position);
-    while (lenSq < minLen) {
-      position = v3_rand_clamp(-1.0f, 1.0f);
-      float lenSq = v3_dot(position, position);
-    }
+  a ^= b << s | b >> (w - s);
+  a *= 2048419325;
+  float r = a * (3.14159265 / ~(~0u >> 1)); // [0, 2PI]
 
-    position = v3_norm(position);
-    position = v3_scale(position, radius);
-    position = v3_add(position, center);
-
-    float mass = randf_clamped(baseMass * 0.7f, baseMass * 1.3f);
-    v3 initialVelocity = v3_0();
-    float speed = randf_clamped(baseSpeed * 0.5f, baseSpeed * 1.5f);
-    v3 positionRelativeToCenter = v3_sub(position, center);
-    v3 tangent = v3_cross(orbitAxis, positionRelativeToCenter);
-    if (v3_len(tangent) > minLen) {
-      initialVelocity = v3_norm(tangent);
-      initialVelocity = v3_scale(initialVelocity, -speed);
-    } else {
-      v3 randDirection = v3_rand_clamp(-1.0f, 1.0f);
-      lenSq = v3_dot(randDirection, randDirection);
-      while (lenSq < minLen) {
-        randDirection = v3_rand_clamp(-1.0f, 1.0f);
-        lenSq = v3_dot(randDirection, randDirection);
-      }
-      initialVelocity = v3_norm(randDirection);
-      initialVelocity = v3_scale(randDirection, speed * 0.1f);
-    }
-    cubes->positions[i] = position;
-    cubes->velocities[i] = initialVelocity;
-    cubes->masses[i] = mass;
-    cubes->sizes[i] = 0.1f;
-  }
+  return (v2){SIN(r), COS(r)};
 }
 
-void updatePhysics(Octree *octree, v3 *positions, v3 *velocities,
-                   v3 *accelerations, float *masses, unsigned bodyCount,
-                   float dt) {
-  Octant initialOctant = sfOctantContaining(positions, bodyCount);
-  sfOctreeClear(octree, &initialOctant);
+float dotGridGrad(int ix, int iy, float x, float y) {
+  v2 grad = randomGrad(ix, iy);
+  float dx = x - (float)ix;
+  float dy = y - (float)iy;
 
-  for (int i = 0; i < bodyCount; ++i) {
-    const v3 position = positions[i];
-    sfOctreeInsert(octree, position, masses[i]);
-  }
+  return dx * grad.x + dy * grad.y;
+}
 
-  sfOctreePropagate(octree);
-  for (int i = 0; i < bodyCount; ++i) {
-    accelerations[i] = sfOctreeAcceleration(octree, positions[i]);
-  }
+float interpolate(float x, float y, float t) {
+  return (y - x) * (-2.0f * t + 3.0f) * t * t + x;
+}
 
-  // Integrate accelerations & velocities
-  for (int i = 1; i < bodyCount; ++i) {
-    v3 *acceleration = &accelerations[i];
-    v3 *velocity = &velocities[i];
-    v3 *position = &positions[i];
+/*
+ (x0, y0) --- (x1, y0)
 
-    *velocity = v3_add(*velocity, v3_scale(*acceleration, dt));
-    *position = v3_add(*position, v3_scale(*velocity, dt));
+    |            |
+    |            |
+    |            |
 
-    v3_zero(acceleration);
-  }
+ (x0, y1) --- (x1, y1)
+ */
+
+// https://www.youtube.com/watch?v=kCIaHqb60Cw
+float perlin(float x, float y) {
+  int x0 = (int)x;
+  int y0 = (int)y;
+  int x1 = x0 + 1;
+  int y1 = y0 + 1;
+
+  float sx = x - (float)x0;
+  float sy = y - (float)y0;
+
+  // Compute and interpolate top two corners
+  float n0 = dotGridGrad(x0, y0, x, y);
+  float n1 = dotGridGrad(x1, y0, x, y);
+  float ix0 = interpolate(n0, n1, sx);
+
+  n0 = dotGridGrad(x0, y1, x, y);
+  n1 = dotGridGrad(x1, y1, x, y);
+  float ix1 = interpolate(n0, n1, sx);
+  return interpolate(ix0, ix1, sy);
 }
 
 int main() {
-  srand(time(NULL));
-  Arena inputArena = sfArenaCreate(MEGABYTE, 1);
-
   if (!glfwInit()) {
     fprintf(stderr, "Failed to init glfw\n");
     return -1;
@@ -295,211 +286,105 @@ int main() {
   GLFWwindow *window = initGlfwWindow(windowWidth, windowHeight);
 
   gladLoadGLLoader((GLADloadproc)glfwGetProcAddress);
-  glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
 
-  Input *input = sfInputArenaAlloc(&inputArena);
-  glfwSetWindowUserPointer(window, input);
+  Arena stateArena = sfArenaCreate(MEGABYTE, 1);
+  Arena voxelsArena = sfArenaCreate(MEGABYTE, 100);
+  Arena cubesArena = sfArenaCreate(MEGABYTE, 100);
+
+  State *state = sfStateArenaAlloc(&stateArena);
+  Input *input = state->input;
+
+  Cubes *cubes = sfCubesArenaAlloc(&cubesArena, 65536);
+  Voxels *voxels = sfVoxelsArenaAlloc(&voxelsArena, cubes->count);
+  voxels->texture = generateColorTexture(64, 64, 16, 64, 16, 255);
+
+  unsigned cols = 256;
+  unsigned rows = 256;
+  unsigned GRID_SIZE = 400.0f;
+  for (int index = 0; index < cubes->count; ++index) {
+
+    float x = index % cols;
+    float z = (int)(index / cols);
+
+    float y = 0;
+    float freq = 1.0f;
+    float amp = 1.0f;
+
+    for (int i = 0; i < 12; ++i) {
+      y += perlin(x * freq / GRID_SIZE, z * freq / GRID_SIZE) * amp;
+
+      freq *= 2.0f;
+      amp /= 2.0f;
+    }
+
+    // Contrast
+    y *= 1.2;
+
+    y = clampf(y, -1.0f, 1.0f);
+    y = ((y + 1.0f) * 0.5f) * 128.0f;
+    y = (int)y;
+
+    cubes->positions[index] = v3_make(x, y, z);
+  }
+
+  unsigned spawnBlockIdx = rand() % cubes->count;
+  state->player->position = cubes->positions[spawnBlockIdx];
+
+  glfwSetWindowUserPointer(window, state);
   glfwGetCursorPos(window, &input->mouse->x, &input->mouse->y);
+  glfwGetFramebufferSize(window, &state->fbw, &state->fbh);
 
+  unsigned voxelsProgram =
+      createShaderProgram("shaders/voxels.vs", "shaders/voxels.fs");
+
+  glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
   glEnable(GL_DEPTH_TEST);
   glEnable(GL_PROGRAM_POINT_SIZE);
   glEnable(GL_CULL_FACE);
   glEnable(GL_BLEND);
   glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
-  Arena cubesArena = sfArenaCreate(MEGABYTE, 100);
-  Arena voxelsArena = sfArenaCreate(MEGABYTE, 100);
-  Arena particlesArena = sfArenaCreate(MEGABYTE, 100);
-
-  Voxels *voxels[MAX_VOXELS];
-  unsigned voxelsCount = 0;
-
-  unsigned starVao, starVbo, starVertexCount, starInstanceCount;
-  sfInitStarBuffers(&starVao, &starVbo, &starVertexCount, &starInstanceCount);
-
-  Cubes *physCubes = sfCubesArenaAlloc(&cubesArena, 2);
-
-  v3 worldDimensions = v3_make(5.0f, 5.0f, 5.0f);
-  // initCircularOrbit(physCubes, worldDimensions);
-
-  physCubes->positions[0] = v3_0();
-  physCubes->velocities[0] = v3_0();
-  physCubes->masses[0] = 100.0f;
-  physCubes->sizes[0] = 1.0f;
-
-  physCubes->positions[1] = v3_make(5.0f, 0.0f, 0.0f);
-  float r = v3_len(v3_sub(physCubes->positions[1], physCubes->positions[0]));
-  float G = 6.6743;
-  physCubes->velocities[1] =
-      v3_scale(v3_make(0.0f, 1.0f, 0.0f), sqrtf(physCubes->masses[0] * G / r));
-  physCubes->masses[1] = 1.0f;
-  physCubes->sizes[1] = 0.1f;
-
-  Particles *particles =
-      sfParticlesArenaAlloc(&particlesArena, physCubes->count);
-
-  unsigned containerTexture = loadImageAsTexture("res/container.jpg");
-  unsigned redDebugTexture = generateColorTexture(64, 64, 255, 0, 0, 64);
-  unsigned greenDebugTexture = generateColorTexture(64, 64, 0, 255, 0, 255);
-  unsigned blueDebugTexture = generateColorTexture(64, 64, 0, 0, 255, 255);
-
-  Voxels *cubeVoxels = sfVoxelsArenaAlloc(&voxelsArena, physCubes->count);
-  cubeVoxels->texture = containerTexture;
-  voxels[voxelsCount++] = cubeVoxels;
-
-  int starProgram = createShaderProgram("shaders/basic.vs", "shaders/basic.fs");
-  int voxelProgram =
-      createShaderProgram("shaders/voxels.vs", "shaders/voxels.fs");
-  int debugProgram =
-      createShaderProgram("shaders/voxels.vs", "shaders/debug.fs");
-  int particlesProgram =
-      createShaderProgram("shaders/particles.vs", "shaders/particles.fs");
-
-  Camera camera = {0};
-  sfInitCamera(&camera);
-  Player player;
-  sfPlayerInit(&player);
-
-  float dt = 0.0f;
-  double time = 0.0f;
+  float time = 0.0f;
   char windowTitle[128];
-
-  float walkingFov = 45.0f;
-  float flyingFov = 60.0f;
-  float fov = walkingFov;
-  float fovAnimDuration = 0.2f;
-  char fovAnimDirection = 0;
-  char fovAnimTimeStart = time;
-  float fovAnimTime = 0;
-
-  Arena octreeArena = sfArenaCreate(MEGABYTE, 100);
-  Octree *octree =
-      sfOctreeArenaAlloc(&octreeArena, 1.0f, 1.0f, 8 * physCubes->count - 1);
-
-  Keyboard *keyboard = input->keyboard;
-
-  unsigned char wasDebugStepDown = 0;
-  unsigned char shouldUpdatePhysics = 0;
-  unsigned char shouldPausePhysics = 0;
   while (!glfwWindowShouldClose(window)) {
     float startTime = glfwGetTime();
-
-    wasDebugStepDown = keyboard->debugStep.isDown;
 
     sfInputClearControllers(input);
     glfwPollEvents();
 
-    if (keyboard->debugStep.isDown && !wasDebugStepDown) {
-      printf("stepping...\n");
-      shouldUpdatePhysics = 1;
-    } else {
-      shouldUpdatePhysics = 0;
+    for (int i = 0; i < cubes->count; ++i) {
+      cubes->debugCollision[i] = 0;
     }
 
-    sfUpdate(input, &camera, &player, dt);
+    sfUpdate(state, cubes);
 
-    float physicsTime = glfwGetTime();
-    // Calculate gravitational forces
-    if (shouldUpdatePhysics || !shouldPausePhysics) {
-      updatePhysics(octree, physCubes->positions, physCubes->velocities,
-                    physCubes->accelerations, physCubes->masses,
-                    physCubes->count, dt);
+    for (int i = 0; i < cubes->count; ++i) {
+      v3 *p = &cubes->positions[i];
+      m44 *transform = &voxels->transforms[i];
+      *transform = m44_identity(1.0f);
+      *transform = translate_v3(transform, p);
+      voxels->colors[i] =
+          cubes->debugCollision[i] ? v4_make(1.0f, 0.0f, 0.0f, 0.5f) : v4_0();
     }
-    physicsTime = glfwGetTime() - physicsTime;
-
-    if (keyboard->toggleFly.isDoubleTap) {
-      printf("flying: %d\n", (int)player.isFlying);
-      fovAnimDirection = player.isFlying ? 1 : -1;
-      fovAnimTimeStart = time;
-    }
-
-    if (fovAnimDirection) {
-      fovAnimTime += dt;
-      if (fovAnimTime >= fovAnimDuration) {
-        fovAnimDirection = 0;
-        fovAnimTime = 0;
-      }
-
-      float t = fovAnimTime / fovAnimDuration;
-      if (fovAnimDirection > 0) {
-        fov = lerp(walkingFov, flyingFov, t);
-      } else if (fovAnimDirection < 0) {
-        fov = lerp(flyingFov, walkingFov, t);
-      }
-    }
-
-    glfwGetFramebufferSize(window, &windowWidth, &windowHeight);
-    glViewport(0, 0, windowWidth, windowHeight);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-
-    glUseProgram(starProgram);
-
-    setUniformFloat(starProgram, "time", time);
-    v3 cameraCenter = v3_add(camera.position, camera.forward);
-    m44 view = lookAt(camera.position, cameraCenter, camera.up);
-    m44 projection =
-        perspective(fov, windowWidth / (float)windowHeight, 0.1f, 1000.0f);
-
-    setUniformM44(starProgram, "projection", &projection);
-    setUniformM44(starProgram, "view", &view);
-
-    // glBindVertexArray(starVao);
-    // glDrawArraysInstanced(GL_TRIANGLES, 0, starVertexCount,
-    // starInstanceCount);
-
-    glUseProgram(voxelProgram);
-    setUniformM44(voxelProgram, "projection", &projection);
-    setUniformM44(voxelProgram, "view", &view);
-
-    // sfVoxelsFromCubes(cubeVoxels, physCubes);
-
-    // Render voxel arena
-    for (int i = 0; i < voxelsCount; ++i) {
-      sfRenderVoxels(voxels[i]);
-    }
-
-    for (int i = 0; i < particles->count; ++i) {
-      particles->positions[i] = physCubes->positions[i];
-      particles->velocities[i] = physCubes->velocities[i];
-    }
-    glUseProgram(particlesProgram);
-    setUniformM44(particlesProgram, "projection", &projection);
-    setUniformM44(particlesProgram, "view", &view);
-    setUniformF3(particlesProgram, "cameraPos", camera.position.x,
-                 camera.position.y, camera.position.z);
-    setUniformI1(particlesProgram, "totalParticles", particles->count);
-    setUniformFloat(particlesProgram, "worldSize", v3_len(worldDimensions));
-
-    sfParticlesRender(particles);
-
-    glUseProgram(0);
-    glBindVertexArray(0);
-    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
+    sfRender(state, voxels, voxelsProgram);
 
     glfwSwapBuffers(window);
 
-    dt = glfwGetTime() - startTime;
-    time += dt;
+    state->dt = glfwGetTime() - startTime;
+    time += state->dt;
 
     float fps = 1.0f;
-    if (dt > 0) {
-      fps = 1.0f / dt;
+    if (state->dt > 0) {
+      fps = 1.0f / state->dt;
     }
-    snprintf(windowTitle, 128, "FPS: %0.1f", fps);
-    // printf("Frame Time: (dt): %fms | Physics Time: %fms\n", dt * 1000.0f,
-    //        physicsTime * 1000.0f);
-
-    printf("r: %f\n",
-           v3_len(v3_sub(physCubes->positions[1], physCubes->positions[0])));
+    snprintf(windowTitle, 128, "FPS: %5.0f", fps);
 
     glfwSetWindowTitle(window, windowTitle);
   }
 
+  sfArenaFree(&stateArena);
   sfArenaFree(&voxelsArena);
   sfArenaFree(&cubesArena);
-  sfArenaFree(&inputArena);
-
-  glfwDestroyWindow(window);
-  glfwTerminate();
   return 0;
 }

@@ -50,6 +50,15 @@ void __bufferInstanceData(Voxels *voxels) {
     glVertexAttribDivisor(INSTANCE_TRANSFORM_LOCATION + i, 1);
   }
 
+  glGenBuffers(1, &voxels->colorsVbo);
+  glBindBuffer(GL_ARRAY_BUFFER, voxels->colorsVbo);
+  glBufferData(GL_ARRAY_BUFFER, voxels->count * sizeof(v4), voxels->colors,
+               GL_DYNAMIC_DRAW);
+  glVertexAttribPointer(INSTANCE_COLOR_LOCATION, 4, GL_FLOAT, GL_FALSE,
+                        sizeof(v4), (void *)(0));
+  glEnableVertexAttribArray(INSTANCE_COLOR_LOCATION);
+  glVertexAttribDivisor(INSTANCE_COLOR_LOCATION, 1);
+
   glBindVertexArray(0);
   glBindBuffer(GL_ARRAY_BUFFER, 0);
 }
@@ -93,6 +102,10 @@ void sfRenderVoxels(const Voxels *voxels) {
   glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(m44) * voxels->count,
                   voxels->transforms);
 
+  glBindBuffer(GL_ARRAY_BUFFER, voxels->colorsVbo);
+  glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(v4) * voxels->count,
+                  voxels->colors);
+
   glDrawArraysInstanced(GL_TRIANGLES, 0, VERTEX_COUNT, voxels->count);
 }
 
@@ -109,6 +122,7 @@ Voxels *sfVoxelsArenaAlloc(Arena *arena, unsigned count) {
   Voxels *voxels = (Voxels *)sfArenaAlloc(arena, sizeof(Voxels));
   voxels->count = count;
   voxels->transforms = (m44 *)sfArenaAlloc(arena, sizeof(m44) * count);
+  voxels->colors = (v4 *)sfArenaAlloc(arena, sizeof(v4) * voxels->count);
   __initBuffers(voxels);
   return voxels;
 }

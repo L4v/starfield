@@ -128,6 +128,9 @@ L4VDEF float v3_len(const v3 v) {
 L4VDEF v3 v3_norm(const v3 v) {
   v3 result = v;
   float l = v3_len(v);
+  if (l == 0.0f) {
+    return v3_0();
+  }
   result.x /= l;
   result.y /= l;
   result.z /= l;
@@ -181,7 +184,7 @@ L4VDEF v3 v3_lerp(const v3 a, const v3 b, float t) {
   return v3_add(scaled_a, scaled_b);
 }
 
-L4VDEF int v3_cmp(const v3 a, const v3 b) {
+L4VDEF int v3_eq(const v3 a, const v3 b) {
   return a.x == b.x && a.y == b.y && a.z == b.z;
 }
 
@@ -206,6 +209,8 @@ L4VDEF v4 v4_make(float x, float y, float z, float w) {
   result.w = w;
   return result;
 }
+
+L4VDEF v4 v4_0() { return (v4){0.0f, 0.0f, 0.0f, 0.0f}; }
 
 L4VDEF float v4_len(const v4 v) {
   return SQRT(v.x * v.x + v.y * v.y + v.z * v.z + v.w * v.w);
@@ -520,11 +525,10 @@ L4VDEF m44 m44_inverse(const m44 m) {
 
 L4VDEF m44 translate(const m44 *m, float x, float y, float z) {
   m44 result = *m;
-
-  result.dx += x * m->ax + y * m->bx + z * m->cx + m->dx;
-  result.dy += x * m->ab + y * m->by + z * m->cy + m->dy;
-  result.dz += x * m->az + y * m->bz + z * m->cz + m->dz;
-  result.dw += x * m->aw + y * m->bw + z * m->cw + m->dw;
+  result.dx += x * m->ax + y * m->bx + z * m->cx;
+  result.dy += x * m->ab + y * m->by + z * m->cy;
+  result.dz += x * m->az + y * m->bz + z * m->cz;
+  result.dw += x * m->aw + y * m->bw + z * m->cw;
   return result;
 }
 

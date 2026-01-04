@@ -1,3 +1,4 @@
+#include "arena.h"
 #include "math3d.h"
 
 typedef struct {
@@ -9,9 +10,11 @@ typedef struct {
 
   float yaw;
   float pitch;
+  float fov;
 } Camera;
 
-void sfInitCamera(Camera *camera);
 void sfUpdateCameraVectors(Camera *camera);
 void sfCameraRotatePitch(Camera *camera, float pitchSpeed, float dt);
 void sfCameraRotateYaw(Camera *camera, float yawSpeed, float dt);
+Camera *sfCameraArenaAlloc(Arena *arena);
+m44 sfCameraLookAt(const Camera *camera);

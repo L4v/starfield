@@ -111,7 +111,7 @@ void sfOctreeInsert(Octree *octree, const v3 position, float mass) {
     return;
   }
 
-  if (v3_cmp(octree->positions[node], position)) {
+  if (v3_eq(octree->positions[node], position)) {
     octree->masses[node] += mass;
     return;
   }
