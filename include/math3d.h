@@ -36,6 +36,8 @@ L4VDEF float rand_deg() {
   return (float)(rand() % 360) + (float)rand() / (float)MAX_RAND;
 };
 
+L4VDEF float fsignf(float x) { return (x > 0) - (x < 0); }
+
 struct v2 {
   union {
     float v[2];
@@ -53,6 +55,8 @@ L4VDEF v2 v2_make(float x, float y) {
   result.y = y;
   return result;
 }
+
+L4VDEF v2 v2_0() { return v2_make(0.0f, 0.0f); }
 
 L4VDEF float v2_len(const v2 v) { return SQRT(v.x * v.x + v.y * v.y); }
 
@@ -187,6 +191,24 @@ L4VDEF v3 v3_lerp(const v3 a, const v3 b, float t) {
 L4VDEF int v3_eq(const v3 a, const v3 b) {
   return a.x == b.x && a.y == b.y && a.z == b.z;
 }
+
+// NOTE: Element-wise multiplication
+L4VDEF v3 v3_mul(const v3 a, const v3 b) {
+  return v3_make(a.x * b.x, a.y * b.y, a.z * b.z);
+}
+
+// NOTE: Element-wise comparisons
+L4VDEF v3 v3_min(const v3 a, const v3 b) {
+  return v3_make(fminf(a.x, b.x), fminf(a.y, b.y), fminf(a.z, b.z));
+}
+
+// NOTE: Element-wise comparisons
+L4VDEF v3 v3_max(const v3 a, const v3 b) {
+  return v3_make(fmaxf(a.x, b.x), fmaxf(a.y, b.y), fmaxf(a.z, b.z));
+}
+
+L4VDEF float v3_minf(const v3 v) { return fminf(v.x, fminf(v.y, v.z)); }
+L4VDEF float v3_maxf(const v3 v) { return fmaxf(v.x, fmaxf(v.y, v.z)); }
 
 struct v4 {
   union {

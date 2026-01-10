@@ -122,3 +122,7 @@ void setUniformF4(int program, const char *uniform, float r, float g, float b,
                   float a) {
   glUniform4f(glGetUniformLocation(program, uniform), r, g, b, a);
 }
+
+void setUniformV4(int program, const char *uniform, const v4 *v) {
+  glUniform4fv(glGetUniformLocation(program, uniform), 1, v->v);
+}

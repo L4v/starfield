@@ -3,6 +3,7 @@
 #include "math3d.h"
 #include "particles.h"
 #include "voxels.h"
+#include <OpenGL/gl.h>
 #include <glad/glad.h>
 #define GLFW_INCLUDE_NONE
 #include "shader.h"
@@ -119,7 +120,7 @@ GLFWwindow *initGlfwWindow(int width, int height) {
   glfwSetKeyCallback(window, glfwKeyCallback);
   glfwSetCursorPosCallback(window, glfwCursorPosCallback);
   glfwSwapInterval(1);
-  glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+  glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
   glfwSetCursorPos(window, 0, 0);
   return window;
 }
@@ -286,6 +287,33 @@ float perlin(float x, float y) {
   return interpolate(ix0, ix1, sy);
 }
 
+int rayRectangleIntersection(v3 rayOrigin, v3 rayDir, v3 targetMin,
+                             v3 targetMax, float *tMin, v3 *normal) {
+  v3 inv = v3_make(1.0f / rayDir.x, 1.0f / rayDir.y, 1.0f / rayDir.z);
+  v3 t0 = v3_mul(v3_sub(targetMin, rayOrigin), inv);
+  v3 t1 = v3_mul(v3_sub(targetMax, rayOrigin), inv);
+
+  v3 tNear = v3_min(t0, t1);
+  v3 tFar = v3_max(t0, t1);
+
+  *tMin = v3_maxf(tNear);
+  float tMax = v3_minf(tFar);
+
+  if (tMax < 0 || *tMin > 1.0f || *tMin > tMax) {
+    return 0;
+  }
+
+  if (*tMin == tNear.x) {
+    *normal = v3_make(-fsignf(rayDir.x), 0.0f, 0.0f);
+  } else if (*tMin == tNear.y) {
+    *normal = v3_make(0.0f, -fsignf(rayDir.y), 0.0f);
+  } else {
+    *normal = v3_make(0.0f, 0.0f, -fsignf(rayDir.z));
+  }
+
+  return 1;
+}
+
 int main() {
   if (!glfwInit()) {
     fprintf(stderr, "Failed to init glfw\n");
@@ -308,7 +336,7 @@ int main() {
 
   Cubes *cubes = sfCubesArenaAlloc(&cubesArena, 65536);
   Voxels *voxels = sfVoxelsArenaAlloc(&voxelsArena, cubes->count);
-  Particles *snowParticles = sfParticlesArenaAlloc(&particlesArena, 10000);
+  Particles *snowParticles = sfParticlesArenaAlloc(&particlesArena, 1000);
 
   voxels->texture = generateColorTexture(64, 64, 16, 64, 16, 255);
 
@@ -352,16 +380,51 @@ int main() {
       createShaderProgram("shaders/voxels.vs", "shaders/voxels.fs");
   unsigned particlesProgram =
       createShaderProgram("shaders/particles.vs", "shaders/particles.fs");
+  unsigned basicProgram =
+      createShaderProgram("shaders/basic.vs", "shaders/basic.fs");
 
   glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
-  glEnable(GL_DEPTH_TEST);
   glEnable(GL_PROGRAM_POINT_SIZE);
+  glEnable(GL_DEPTH_TEST);
   glEnable(GL_CULL_FACE);
+  glFrontFace(GL_CCW);
   glEnable(GL_BLEND);
   glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
-  float time = 0.0f;
+  unsigned lineVao, lineVbo;
+  float linePts[6] = {0.0f, 0.0f, 0.0f, 1.0f, 1.0f, 0.0f};
+  glGenVertexArrays(1, &lineVao);
+  glGenBuffers(1, &lineVbo);
+  glBindVertexArray(lineVao);
+  glBindBuffer(GL_ARRAY_BUFFER, lineVbo);
+  glBufferData(GL_ARRAY_BUFFER, sizeof(float) * 6, linePts, GL_DYNAMIC_DRAW);
+  glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(float) * 3,
+                        (void *)(0));
+  glEnableVertexAttribArray(0);
+  glBindBuffer(GL_ARRAY_BUFFER, 0);
+  glBindVertexArray(0);
+
+  unsigned triangleVao, triangleVbo;
+  float trianglePts[9] = {-0.5f, -0.5f, 0.0f, 0.5f, -0.5f,
+                          0.0f,  0.0f,  0.5f, 0.0f};
+  glGenVertexArrays(1, &triangleVao);
+  glGenBuffers(1, &triangleVbo);
+  glBindVertexArray(triangleVao);
+  glBindBuffer(GL_ARRAY_BUFFER, triangleVbo);
+  glBufferData(GL_ARRAY_BUFFER, sizeof(float) * 9, trianglePts, GL_STATIC_DRAW);
+  glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(float) * 3,
+                        (void *)(0));
+  glEnableVertexAttribArray(0);
+  glBindBuffer(GL_ARRAY_BUFFER, 0);
+  glBindVertexArray(0);
+
   char windowTitle[128];
+
+  v3 dynamicPos = v3_make(200, 1500, 0);
+  v3 dynamicSize = v3_make(100, 200, 0);
+  v3 dynamicVel = v3_0();
+
+  v3 rayOrigin = v3_make(200, 1500, 0);
   while (!glfwWindowShouldClose(window)) {
     float startTime = glfwGetTime();
 
@@ -372,7 +435,7 @@ int main() {
       cubes->debugCollision[i] = 0;
     }
 
-    sfUpdate(state, cubes, snowParticles);
+    // sfUpdate(state, cubes, snowParticles);
 
     for (int i = 0; i < cubes->count; ++i) {
       v3 *p = &cubes->positions[i];
@@ -382,13 +445,170 @@ int main() {
       voxels->colors[i] =
           cubes->debugCollision[i] ? v4_make(1.0f, 0.0f, 0.0f, 0.5f) : v4_0();
     }
+    float scaleW = (float)state->fbw / windowWidth;
+    float scaleH = (float)state->fbh / windowHeight;
+    v3 mousePos = v3_make(input->mouse->x * scaleW,
+                          state->fbh - input->mouse->y * scaleH, 0.0f);
+    v3 rayTarget = v3_make(mousePos.x, mousePos.y, 0.0f);
+    rayOrigin = dynamicPos;
+
+    v3 dynMin = v3_sub(dynamicPos, v3_scale(dynamicSize, 0.5f));
+    v3 dynMax = v3_add(dynamicPos, v3_scale(dynamicSize, 0.5f));
+
+    v3 boxPos = v3_make(1700.0f, 1000.0f, 0.0f);
+    v3 boxSize = v3_make(500.0f, 500.0f, 0.0f);
+
+    float tHitNear = 0.0f;
+    v3 normal = v3_0();
+    v3 boxMin = v3_sub(boxPos, v3_scale(boxSize, 0.5f));
+    v3 boxMax = v3_add(boxPos, v3_scale(boxSize, 0.5f));
+
+    v3 minkMin = v3_sub(boxMin, v3_scale(dynamicSize, 0.5f));
+    v3 minkMax = v3_add(boxMax, v3_scale(dynamicSize, 0.5f));
+    v3 rayDir = v3_scale(dynamicVel, state->dt);
+    int collision = rayRectangleIntersection(rayOrigin, rayDir, minkMin,
+                                             minkMax, &tHitNear, &normal) &&
+                    (dynamicVel.x != 0 || dynamicVel.y != 0);
+    if (collision) {
+      float remainingTime = 1.0f - tHitNear;
+      float dot = v3_dot(dynamicVel, normal);
+      dynamicVel = v3_sub(dynamicVel, v3_scale(normal, dot));
+      dynamicVel = v3_scale(dynamicVel, remainingTime);
+    }
+
+    if (!collision) {
+      dynamicPos = v3_add(dynamicPos, v3_scale(dynamicVel, state->dt));
+    }
+
+    if (input->keyboard->debugStep.isDown && !collision) {
+      rayOrigin = v3_make(mousePos.x, mousePos.y, 0.0f);
+      v3 d = v3_sub(mousePos, dynamicPos);
+      dynamicVel = d;
+    }
+
+    if (collision) {
+      printf("%f, %f %f\n", normal.x, normal.y, normal.z);
+    }
+
+    v3 contactPoint = v3_add(rayOrigin, v3_scale(rayDir, tHitNear));
+    contactPoint =
+        v3_sub(contactPoint, v3_scale(v3_make(normal.x * dynamicSize.x,
+                                              normal.y * dynamicSize.y,
+                                              normal.z * dynamicSize.z),
+                                      0.5f));
+
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-    sfRender(state, voxels, voxelsProgram, snowParticles, particlesProgram);
+    glUseProgram(basicProgram);
+
+    m44 model = m44_identity(1.0f);
+    m44 view = m44_identity(1.0f);
+    m44 projection =
+        orthographic(0.0f, state->fbw, 0.0f, state->fbh, -1.0f, 1.0f);
+
+    setUniformM44(basicProgram, "model", &model);
+    setUniformM44(basicProgram, "projection", &projection);
+    setUniformM44(basicProgram, "view", &view);
+    v4 color = v4_make(1.0f, 1.0f, 1.0f, 1.0f);
+    setUniformV4(basicProgram, "color", &color);
+    glBindVertexArray(lineVao);
+    glBindBuffer(GL_ARRAY_BUFFER, lineVbo);
+
+    // Draw grid
+    v3 gridLines[8] = {
+        v3_make(boxMin.x, 0.0f, -0.5f), v3_make(boxMin.x, state->fbh, -0.5f),
+        v3_make(boxMax.x, 0.0f, -0.5f), v3_make(boxMax.x, state->fbh, -0.5f),
+        v3_make(0.0f, boxMin.y, -0.5f), v3_make(state->fbw, boxMin.y, -0.5f),
+        v3_make(0.0f, boxMax.y, -0.5f), v3_make(state->fbw, boxMax.y, -0.5f),
+    };
+    color = v4_make(1.0f, 1.0f, 1.0f, 0.25f);
+    setUniformV4(basicProgram, "color", &color);
+    for (int i = 0; i < 4; ++i) {
+      v3 l[2] = {gridLines[i * 2], gridLines[i * 2 + 1]};
+      glBufferSubData(GL_ARRAY_BUFFER, 0, 2 * sizeof(v3), l);
+      glDrawArrays(GL_LINES, 0, 2);
+    }
+
+    // Draw rect
+    v3 boxLines[8] = {
+        boxMin, v3_make(boxMin.x, boxMax.y, 0.5f),
+        boxMin, v3_make(boxMax.x, boxMin.y, 0.5f),
+        boxMax, v3_make(boxMin.x, boxMax.y, 0.5f),
+        boxMax, v3_make(boxMax.x, boxMin.y, 0.5f),
+    };
+    color = v4_make(1.0f, 1.0f, 1.0f, 1.0f);
+    if (collision) {
+      color = v4_make(1.0f, 0.0f, 0.0f, 1.0f);
+    }
+    setUniformV4(basicProgram, "color", &color);
+    for (int i = 0; i < 4; ++i) {
+      v3 l[2] = {boxLines[i * 2], boxLines[i * 2 + 1]};
+      glBufferSubData(GL_ARRAY_BUFFER, 0, 2 * sizeof(v3), l);
+      glDrawArrays(GL_LINES, 0, 2);
+    }
+
+    // Draw mink
+    v3 minkLines[8] = {
+        minkMin, v3_make(minkMin.x, minkMax.y, 0.5f),
+        minkMin, v3_make(minkMax.x, minkMin.y, 0.5f),
+        minkMax, v3_make(minkMin.x, minkMax.y, 0.5f),
+        minkMax, v3_make(minkMax.x, minkMin.y, 0.5f),
+    };
+    color = v4_make(1.0f, 1.0f, 0.0f, 0.3f);
+    setUniformV4(basicProgram, "color", &color);
+    for (int i = 0; i < 4; ++i) {
+      v3 l[2] = {minkLines[i * 2], minkLines[i * 2 + 1]};
+      glBufferSubData(GL_ARRAY_BUFFER, 0, 2 * sizeof(v3), l);
+      glDrawArrays(GL_LINES, 0, 2);
+    }
+
+    // Draw ray
+    color = v4_make(1.0f, 1.0f, 1.0f, 1.0f);
+    setUniformV4(basicProgram, "color", &color);
+    v3 linePos[2] = {rayOrigin, rayTarget};
+    glBufferSubData(GL_ARRAY_BUFFER, 0, 2 * sizeof(v3), linePos);
+    glDrawArrays(GL_LINES, 0, 2);
+
+    // Draw dynamic rect
+    v3 dynamicLines[8] = {
+        dynMin, v3_make(dynMin.x, dynMax.y, 0.5f),
+        dynMin, v3_make(dynMax.x, dynMin.y, 0.5f),
+        dynMax, v3_make(dynMin.x, dynMax.y, 0.5f),
+        dynMax, v3_make(dynMax.x, dynMin.y, 0.5f),
+    };
+    for (int i = 0; i < 4; ++i) {
+      v3 l[2] = {dynamicLines[i * 2], dynamicLines[i * 2 + 1]};
+      glBufferSubData(GL_ARRAY_BUFFER, 0, 2 * sizeof(v3), l);
+      glDrawArrays(GL_LINES, 0, 2);
+    }
+
+    // Triangle
+    if (collision) {
+      glBindVertexArray(triangleVao);
+      model = m44_identity(1.0f);
+      model = translate_v3(&model, &contactPoint);
+      model = scale(&model, 50, 50, 50);
+      setUniformM44(basicProgram, "model", &model);
+      glDrawArrays(GL_TRIANGLES, 0, 3);
+
+      model = m44_identity(1.0f);
+      setUniformM44(basicProgram, "model", &model);
+      color = v4_make(1.0f, 1.0f, 0.0f, 1.0f);
+      setUniformV4(basicProgram, "color", &color);
+      glBindVertexArray(lineVao);
+      v3 l[2] = {contactPoint, v3_add(contactPoint, v3_scale(normal, 100.0f))};
+      l[0].z = 0.7;
+      l[1].z = 0.7;
+      glBufferSubData(GL_ARRAY_BUFFER, 0, 2 * sizeof(v3), l);
+      glDrawArrays(GL_LINES, 0, 2);
+    }
+
+    glBindBuffer(GL_ARRAY_BUFFER, 0);
+    glBindVertexArray(0);
 
     glfwSwapBuffers(window);
 
     state->dt = glfwGetTime() - startTime;
-    time += state->dt;
+    state->time += state->dt;
 
     float fps = 1.0f;
     if (state->dt > 0) {

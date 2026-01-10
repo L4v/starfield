@@ -1,5 +1,6 @@
 #include "starfield.h"
 #include "math3d.h"
+#include <math.h>
 
 Player *sfPlayerArenaAlloc(Arena *arena) {
   Player *player = (Player *)sfArenaAlloc(arena, sizeof(Player));
@@ -88,6 +89,7 @@ void sfUpdate(State *state, Cubes *cubes, Particles *snow) {
     sfCameraRotatePitch(camera, mouse->dy * 10.0, dt);
   }
 
+  // Snow
   for (int i = 0; i < snow->count; ++i) {
     snow->ttls[i] -= dt;
     float ttl = snow->ttls[i];
@@ -96,7 +98,7 @@ void sfUpdate(State *state, Cubes *cubes, Particles *snow) {
       snow->positions[i] =
           v3_make(randf_clamped(0.0f, 256.0f), randf_clamped(100.0f, 128.0f),
                   randf_clamped(0.0f, 256.0f));
-      snow->velocities[i] = v3_make(0.0f, -randf_clamped(0.1f, 10.0f), 0.0f);
+      snow->velocities[i] = v3_make(5.0f, -randf_clamped(0.1f, 10.0f), 0.4f);
       continue;
     }
     snow->positions[i] =
@@ -115,72 +117,53 @@ void sfUpdate(State *state, Cubes *cubes, Particles *snow) {
 
   for (int i = 0; i < cubes->count; ++i) {
     v3 *p = &cubes->positions[i];
-    float s = cubes->sizes[i] / 2.0f;
-    v3 cMin = v3_add(*p, v3_make(-s, -s, -s));
-    v3 cMax = v3_add(*p, v3_make(s, s, s));
+    float s = cubes->sizes[i] * 0.5f;
+    v3 boxMin = v3_add(*p, v3_make(-s, -s, -s));
+    v3 boxMax = v3_add(*p, v3_make(s, s, s));
+    v3 origin = player->position;
+    v3 direction = player->velocity;
 
-    v3 invEntry = v3_0();
-    v3 invExit = v3_0();
-
-    if (player->velocity.x > 0.0f) {
-      invEntry.x = cMin.x - pMax.x;
-      invExit.x = cMax.x - pMin.x;
-    } else {
-      invEntry.x = cMax.x - pMin.x;
-      invExit.x = cMin.x - pMax.x;
+    // Sort min and max box bounds
+    for (int i = 0; i < 3; ++i) {
+      if (boxMin.v[i] > boxMax.v[i]) {
+        float t = boxMin.v[i];
+        boxMin.v[i] = boxMax.v[i];
+        boxMax.v[i] = t;
+      }
     }
 
-    if (player->velocity.y > 0.0f) {
-      invEntry.y = cMin.y - pMax.y;
-      invExit.y = cMax.y - pMin.y;
-    } else {
-      invEntry.y = cMax.y - pMin.y;
-      invExit.y = cMin.y - pMax.y;
+    v3 t0 = v3_0();
+    t0.x =
+        direction.x != 0.0f ? (boxMin.x - origin.x) / direction.x : -INFINITY;
+    t0.y =
+        direction.y != 0.0f ? (boxMin.y - origin.y) / direction.y : -INFINITY;
+    float tMin = (t0.x > t0.y) ? t0.x : t0.y;
+
+    v3 t1 = v3_0();
+    t1.x = direction.x != 0.0f ? (boxMax.x - origin.x) / direction.x : INFINITY;
+    t1.y = direction.y != 0.0f ? (boxMax.y - origin.y) / direction.y : INFINITY;
+    float tMax = (t1.x < t1.y) ? t1.x : t1.y;
+    if (t0.x > t1.y || t0.y > t1.x) {
+      continue; // No collision
     }
 
-    if (player->velocity.z > 0.0f) {
-      invEntry.z = cMin.z - pMax.z;
-      invExit.z = cMax.z - pMin.z;
-    } else {
-      invEntry.z = cMax.z - pMin.z;
-      invExit.z = cMin.z - pMax.z;
+    t0.z =
+        direction.z != 0.0f ? (boxMin.z - origin.z) / direction.z : -INFINITY;
+    t1.z = direction.z != 0.0f ? (boxMax.z - origin.z) / direction.z : INFINITY;
+    if (tMin > t1.z || t0.z > tMax) {
+      continue; // No collision
     }
 
-    v3 entry = v3_make(-INFINITY, -INFINITY, -INFINITY);
-    v3 exit = v3_make(INFINITY, INFINITY, INFINITY);
-
-    v3 velocity = player->velocity;
-    if (velocity.x != 0.0f) {
-      entry.x = invEntry.x / velocity.x;
-      exit.x = invExit.x / velocity.x;
+    if (t0.z > tMin) {
+      tMin = t0.z;
     }
 
-    if (velocity.y != 0.0f) {
-      entry.y = invEntry.y / velocity.y;
-      exit.y = invExit.y / velocity.y;
+    if (t1.z < tMax) {
+      tMax = t1.z;
     }
 
-    if (velocity.z != 0.0f) {
-      entry.z = invEntry.z / velocity.z;
-      exit.z = invExit.z / velocity.z;
-    }
-
-    float entryTime = fmaxf(fmaxf(entry.x, entry.y), entry.z);
-    float exitTime = fminf(fminf(exit.x, exit.y), exit.z);
-
-    if (entryTime > exitTime || entryTime < 0.0f || entryTime > 1.0f) {
-      // no collision
-    } else {
-      printf("Collision\n");
-      cubes->debugCollision[i] = 1;
-    }
-
-    // unsigned char xIntersect = pMin.x <= cMax.x && pMax.x > cMin.x;
-    // unsigned char yIntersect = pMin.y <= cMax.y && pMax.y > cMin.y;
-    // unsigned char zIntersect = pMin.z <= cMax.z && pMax.z > cMin.z;
-    // if (xIntersect && yIntersect && zIntersect) {
-    //   cubes->debugCollision[i] = 1;
-    // }
+    printf("Collision\n");
+    cubes->debugCollision[i] = 1;
   }
 
   sfUpdateCameraVectors(camera);

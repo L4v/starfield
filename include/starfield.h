@@ -62,6 +62,7 @@ typedef struct {
   int fbw;
   int fbh;
   float dt;
+  float time;
   Player *player;
   Camera *camera;
   Input *input;

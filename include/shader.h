@@ -17,3 +17,4 @@ void setUniformF3(int program, const char *uniform, float r, float g, float b);
 void setUniformV3(int program, const char *uniform, const v3 *v);
 void setUniformF4(int program, const char *uniform, float r, float g, float b,
                   float a);
+void setUniformV4(int program, const char *uniform, const v4 *v);
