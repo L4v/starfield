@@ -20,6 +20,7 @@
 #define RAD PI / 180.0f
 #define DEG 180.0f / PI
 #define MAX_RAND RAND_MAX
+#define FP_EPSILON 1e-6
 
 L4VDEF float lerp(float a, float b, float t) { return a + (b - a) * t; }
 
@@ -37,6 +38,8 @@ L4VDEF float rand_deg() {
 };
 
 L4VDEF float fsignf(float x) { return (x > 0) - (x < 0); }
+
+L4VDEF int fiszerof(float x) { return fabsf(x) < FP_EPSILON; }
 
 struct v2 {
   union {
@@ -209,6 +212,10 @@ L4VDEF v3 v3_max(const v3 a, const v3 b) {
 
 L4VDEF float v3_minf(const v3 v) { return fminf(v.x, fminf(v.y, v.z)); }
 L4VDEF float v3_maxf(const v3 v) { return fmaxf(v.x, fmaxf(v.y, v.z)); }
+
+L4VDEF int v3_iszero(const v3 *v) {
+  return fiszerof(v->x) && fiszerof(v->y) && fiszerof(v->z);
+}
 
 struct v4 {
   union {

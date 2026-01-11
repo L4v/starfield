@@ -6,6 +6,7 @@
 #include <OpenGL/gl.h>
 #include <glad/glad.h>
 #define GLFW_INCLUDE_NONE
+#include "collision.h"
 #include "shader.h"
 #include "starfield.h"
 #include <GLFW/glfw3.h>
@@ -287,33 +288,6 @@ float perlin(float x, float y) {
   return interpolate(ix0, ix1, sy);
 }
 
-int rayRectangleIntersection(v3 rayOrigin, v3 rayDir, v3 targetMin,
-                             v3 targetMax, float *tMin, v3 *normal) {
-  v3 inv = v3_make(1.0f / rayDir.x, 1.0f / rayDir.y, 1.0f / rayDir.z);
-  v3 t0 = v3_mul(v3_sub(targetMin, rayOrigin), inv);
-  v3 t1 = v3_mul(v3_sub(targetMax, rayOrigin), inv);
-
-  v3 tNear = v3_min(t0, t1);
-  v3 tFar = v3_max(t0, t1);
-
-  *tMin = v3_maxf(tNear);
-  float tMax = v3_minf(tFar);
-
-  if (tMax < 0 || *tMin > 1.0f || *tMin > tMax) {
-    return 0;
-  }
-
-  if (*tMin == tNear.x) {
-    *normal = v3_make(-fsignf(rayDir.x), 0.0f, 0.0f);
-  } else if (*tMin == tNear.y) {
-    *normal = v3_make(0.0f, -fsignf(rayDir.y), 0.0f);
-  } else {
-    *normal = v3_make(0.0f, 0.0f, -fsignf(rayDir.z));
-  }
-
-  return 1;
-}
-
 int main() {
   if (!glfwInit()) {
     fprintf(stderr, "Failed to init glfw\n");
@@ -458,21 +432,22 @@ int main() {
     v3 boxPos = v3_make(1700.0f, 1000.0f, 0.0f);
     v3 boxSize = v3_make(500.0f, 500.0f, 0.0f);
 
-    float tHitNear = 0.0f;
-    v3 normal = v3_0();
     v3 boxMin = v3_sub(boxPos, v3_scale(boxSize, 0.5f));
     v3 boxMax = v3_add(boxPos, v3_scale(boxSize, 0.5f));
 
-    v3 minkMin = v3_sub(boxMin, v3_scale(dynamicSize, 0.5f));
-    v3 minkMax = v3_add(boxMax, v3_scale(dynamicSize, 0.5f));
     v3 rayDir = v3_scale(dynamicVel, state->dt);
-    int collision = rayRectangleIntersection(rayOrigin, rayDir, minkMin,
-                                             minkMax, &tHitNear, &normal) &&
-                    (dynamicVel.x != 0 || dynamicVel.y != 0);
+
+    AabbResult aabbResult = {0};
+    AabbCollider aabbCollider = {dynamicPos, v3_scale(dynamicVel, state->dt),
+                                 dynamicSize};
+    v3 boxBounds[2] = {boxMin, boxMax};
+    int collision =
+        sfAabbCheckCollision(&aabbCollider, boxBounds, &aabbResult) &&
+        v3_len(dynamicVel) != 0.0f;
     if (collision) {
-      float remainingTime = 1.0f - tHitNear;
-      float dot = v3_dot(dynamicVel, normal);
-      dynamicVel = v3_sub(dynamicVel, v3_scale(normal, dot));
+      float remainingTime = 1.0f - aabbResult.tMin;
+      float dot = v3_dot(dynamicVel, aabbResult.normal);
+      dynamicVel = v3_sub(dynamicVel, v3_scale(aabbResult.normal, dot));
       dynamicVel = v3_scale(dynamicVel, remainingTime);
     }
 
@@ -486,16 +461,12 @@ int main() {
       dynamicVel = d;
     }
 
-    if (collision) {
-      printf("%f, %f %f\n", normal.x, normal.y, normal.z);
-    }
-
-    v3 contactPoint = v3_add(rayOrigin, v3_scale(rayDir, tHitNear));
-    contactPoint =
-        v3_sub(contactPoint, v3_scale(v3_make(normal.x * dynamicSize.x,
-                                              normal.y * dynamicSize.y,
-                                              normal.z * dynamicSize.z),
-                                      0.5f));
+    v3 contactPoint = v3_add(rayOrigin, v3_scale(rayDir, aabbResult.tMin));
+    contactPoint = v3_sub(contactPoint,
+                          v3_scale(v3_make(aabbResult.normal.x * dynamicSize.x,
+                                           aabbResult.normal.y * dynamicSize.y,
+                                           aabbResult.normal.z * dynamicSize.z),
+                                   0.5f));
 
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
     glUseProgram(basicProgram);
@@ -546,21 +517,6 @@ int main() {
       glDrawArrays(GL_LINES, 0, 2);
     }
 
-    // Draw mink
-    v3 minkLines[8] = {
-        minkMin, v3_make(minkMin.x, minkMax.y, 0.5f),
-        minkMin, v3_make(minkMax.x, minkMin.y, 0.5f),
-        minkMax, v3_make(minkMin.x, minkMax.y, 0.5f),
-        minkMax, v3_make(minkMax.x, minkMin.y, 0.5f),
-    };
-    color = v4_make(1.0f, 1.0f, 0.0f, 0.3f);
-    setUniformV4(basicProgram, "color", &color);
-    for (int i = 0; i < 4; ++i) {
-      v3 l[2] = {minkLines[i * 2], minkLines[i * 2 + 1]};
-      glBufferSubData(GL_ARRAY_BUFFER, 0, 2 * sizeof(v3), l);
-      glDrawArrays(GL_LINES, 0, 2);
-    }
-
     // Draw ray
     color = v4_make(1.0f, 1.0f, 1.0f, 1.0f);
     setUniformV4(basicProgram, "color", &color);
@@ -595,7 +551,8 @@ int main() {
       color = v4_make(1.0f, 1.0f, 0.0f, 1.0f);
       setUniformV4(basicProgram, "color", &color);
       glBindVertexArray(lineVao);
-      v3 l[2] = {contactPoint, v3_add(contactPoint, v3_scale(normal, 100.0f))};
+      v3 l[2] = {contactPoint,
+                 v3_add(contactPoint, v3_scale(aabbResult.normal, 100.0f))};
       l[0].z = 0.7;
       l[1].z = 0.7;
       glBufferSubData(GL_ARRAY_BUFFER, 0, 2 * sizeof(v3), l);
