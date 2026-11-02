@@ -24,6 +24,7 @@ target_include_directories(glad PRIVATE
 add_executable(starfield ${SOURCES} "src/main.c")
 
 add_executable(spritesheet ${SOURCES} "src/main_spritesheet.c")
+add_executable(heat ${SOURCES} "src/main_heat.c")
 
 target_compile_features(starfield PRIVATE c_std_11)
 target_include_directories(starfield PRIVATE
@@ -48,6 +49,20 @@ target_include_directories(spritesheet PRIVATE
 
 # Link libraries
 target_link_libraries(spritesheet PRIVATE
+   OpenGL::GL
+   glfw
+   glad
+)
+
+target_compile_features(heat PRIVATE c_std_11)
+target_include_directories(heat PRIVATE
+   glad/include
+   include
+   src
+)
+
+# Link libraries
+target_link_libraries(heat PRIVATE
    OpenGL::GL
    glfw
    glad
